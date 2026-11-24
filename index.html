@@ -12094,34 +12094,62 @@ window.updateFriendsCount = async function(targetUid = null) {
         const uid = targetUid || (currentUser ? currentUser.uid : null);
         if (!uid) return;
 
-        // جلب العدد الفعلي من مجموعة friends الفرعية
         const snapshot = await db.collection('users').doc(uid).collection('friends').get();
-        const count = snapshot.size;
+        
+        let validCount = 0;
+        const validIds = [];
+
+        for (const doc of snapshot.docs) {
+            // 1. استبعاد حساب المستخدم نفسه
+            if (doc.id === uid) {
+                await doc.ref.delete().catch(() => {});
+                continue;
+            }
+            // 2. التحقق من أن حساب الصديق لا يزال موجوداً في قاعدة البيانات
+            const userExists = await db.collection('users').doc(doc.id).get();
+            if (userExists.exists) {
+                validCount++;
+                validIds.push(userExists.data().name || doc.id);
+            } else {
+                // حذف السجل التالف لصديق غير موجود
+                await doc.ref.delete().catch(() => {});
+            }
+        }
+
+        console.log(`📊 العدد الفعلي للأصدقاء (${validCount}):`, validIds);
 
         if (targetUid) {
             const friendEl = document.getElementById('friendProfileFriends');
-            if (friendEl) friendEl.innerText = `${count} أصدقاء`;
+            if (friendEl) friendEl.innerText = `${validCount} أصدقاء`;
         } else {
-            // تحديث العداد في الملف الشخصي الرئيسي
-            const mainEl = document.getElementById('mainProfileFriends');
-            if (mainEl) mainEl.innerText = `${count} أصدقاء`;
+            // تحديث جميع عناصر العداد المحتملة في الصفحة الرئيسية وتبويب الأصدقاء
+            const selectors = [
+                '#mainProfileFriends',
+                '#friendsCount',
+                '#profileFriendsCount',
+                '#totalFriendsCount',
+                '.friends-count'
+            ];
 
-            // تحديث العداد في تبويب الأصدقاء
-            const tabBadge = document.getElementById('friendsCount');
-            if (tabBadge) tabBadge.innerText = count > 0 ? count : '0';
-
-            // تحديث أي عنصر آخر يحمل نفس الكلاس أو المعرف
-            document.querySelectorAll('.friends-count, #profileFriendsCount').forEach(el => {
-                el.innerText = count;
+            selectors.forEach(selector => {
+                document.querySelectorAll(selector).forEach(el => {
+                    // الحفاظ على كلمة "أصدقاء" إذا كانت موجودة في النص الأصلي
+                    if (el.id === 'mainProfileFriends') {
+                        el.innerText = `${validCount} أصدقاء`;
+                    } else {
+                        el.innerText = validCount;
+                    }
+                });
             });
 
-            // تحديث حقل العدد في مستند المستخدم الرئيسي في Firestore ليبقى متزامناً
-            db.collection('users').doc(uid).update({ friendsCount: count }).catch(() => {});
+            // تحديث الرقم في مستند المستخدم الرئيسي في Firestore
+            await db.collection('users').doc(uid).update({ friendsCount: validCount }).catch(() => {});
         }
     } catch (error) {
         console.error('❌ خطأ في تحديث العداد:', error.message);
     }
 };
+
  </script>
  
 
