@@ -4994,7 +4994,7 @@ iframe {
 </div>
  
 <!-- صفحة ملف الصديق -->
-<div class="friend-profile-page" id="friendProfilePage">
+<div class="friend-profile-page" id="friendProfilePage" style="display: none;">
     <div class="friend-profile-container">
         <!-- الهيدر مع زر الرجوع -->
         <header class="friend-profile-header">
@@ -9474,36 +9474,41 @@ function initFriendProfileSystem() {
         const style = document.createElement('style');
         style.id = 'friendProfileStyles';
         style.textContent = `
+            #friendProfilePage { display: none !important; }
             .friend-profile-overlay {
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 100%;
-                height: 100%;
+                width: 100vw;
+                height: 100vh;
                 background: #f0f2f5;
-                z-index: 9999;
+                z-index: 99999;
                 overflow-y: auto;
                 display: none;
+                direction: rtl;
             }
-            .friend-profile-container {
+            .friend-profile-overlay * {
+                box-sizing: border-box;
+            }
+            .fp-container {
                 max-width: 940px;
                 margin: 0 auto;
                 background: #fff;
                 min-height: 100vh;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                box-shadow: 0 1px 4px rgba(0,0,0,0.1);
             }
-            .friend-cover-section {
+            .fp-cover-section {
                 position: relative;
-                height: 280px;
+                height: 260px;
                 background: linear-gradient(135deg, #1877f2, #0d47a1);
                 background-size: cover;
                 background-position: center;
             }
-            .friend-back-btn {
+            .fp-back-btn {
                 position: absolute;
                 top: 15px;
                 right: 15px;
-                background: rgba(0,0,0,0.6);
+                background: rgba(0,0,0,0.65);
                 color: #fff;
                 border: none;
                 padding: 10px 18px;
@@ -9511,38 +9516,36 @@ function initFriendProfileSystem() {
                 cursor: pointer;
                 font-size: 14px;
                 font-weight: 600;
-                display: flex;
+                display: inline-flex;
                 align-items: center;
                 gap: 8px;
                 z-index: 10;
-                transition: background 0.2s;
             }
-            .friend-back-btn:hover {
-                background: rgba(0,0,0,0.8);
-            }
-            .friend-header-info {
+            .fp-back-btn:hover { background: rgba(0,0,0,0.85); }
+            .fp-header-info {
                 padding: 0 25px 20px;
                 display: flex;
                 flex-wrap: wrap;
                 align-items: flex-end;
                 justify-content: space-between;
-                margin-top: -65px;
+                margin-top: -60px;
                 position: relative;
                 border-bottom: 1px solid #e4e6eb;
+                gap: 15px;
             }
-            .friend-avatar-wrapper {
+            .fp-avatar-wrapper {
                 display: flex;
                 align-items: flex-end;
-                gap: 20px;
+                gap: 18px;
             }
-            .friend-main-avatar {
-                width: 140px;
-                height: 140px;
+            .fp-main-avatar {
+                width: 130px;
+                height: 130px;
                 border-radius: 50%;
                 border: 4px solid #fff;
                 background: #4a6cf7;
                 color: #fff;
-                font-size: 52px;
+                font-size: 48px;
                 font-weight: bold;
                 display: flex;
                 align-items: center;
@@ -9550,31 +9553,32 @@ function initFriendProfileSystem() {
                 overflow: hidden;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
                 cursor: pointer;
+                flex-shrink: 0;
             }
-            .friend-main-avatar img {
+            .fp-main-avatar img {
                 width: 100%;
                 height: 100%;
                 object-fit: cover;
             }
-            .friend-name-meta {
-                padding-bottom: 10px;
+            .fp-name-meta { padding-bottom: 8px; }
+            .fp-name-meta h2 { margin: 0 0 4px; font-size: 24px; color: #050505; }
+            .fp-name-meta p { margin: 0; color: #65676b; font-size: 14px; }
+            .fp-action-buttons { display: flex; gap: 10px; padding-bottom: 8px; }
+            .fp-btn {
+                padding: 9px 16px;
+                border-radius: 8px;
+                border: none;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
             }
-            .friend-name-meta h2 {
-                margin: 0 0 5px;
-                font-size: 26px;
-                color: #050505;
-            }
-            .friend-name-meta p {
-                margin: 0;
-                color: #65676b;
-                font-size: 15px;
-            }
-            .friend-action-buttons {
-                display: flex;
-                gap: 10px;
-                padding-bottom: 10px;
-            }
-            .friend-nav-tabs {
+            .fp-btn-primary { background: #1877f2; color: #fff; }
+            .fp-btn-secondary { background: #e4e6eb; color: #050505; }
+            .fp-btn-danger { background: #ffebe9; color: #d93025; }
+            .fp-nav-tabs {
                 display: flex;
                 gap: 5px;
                 padding: 0 20px;
@@ -9584,8 +9588,8 @@ function initFriendProfileSystem() {
                 top: 0;
                 z-index: 5;
             }
-            .friend-tab-item {
-                padding: 15px 20px;
+            .fp-tab-item {
+                padding: 14px 18px;
                 border: none;
                 background: transparent;
                 font-size: 15px;
@@ -9593,18 +9597,53 @@ function initFriendProfileSystem() {
                 color: #65676b;
                 cursor: pointer;
                 border-bottom: 3px solid transparent;
-                transition: all 0.2s;
             }
-            .friend-tab-item.active {
+            .fp-tab-item.active {
                 color: #1877f2;
                 border-bottom-color: #1877f2;
             }
-            .friend-tab-panel {
-                display: none;
-                padding: 20px;
+            .fp-tab-panel { display: none; padding: 20px; }
+            .fp-tab-panel.active { display: block; }
+            .fp-post-card {
+                background: #fff;
+                border: 1px solid #e4e6eb;
+                border-radius: 12px;
+                padding: 16px;
+                margin-bottom: 16px;
             }
-            .friend-tab-panel.active {
-                display: block;
+            .fp-about-card {
+                background: #f8f9fa;
+                border-radius: 12px;
+                padding: 20px;
+                line-height: 2;
+            }
+            .fp-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                gap: 15px;
+            }
+            .fp-mini-card {
+                border: 1px solid #e4e6eb;
+                border-radius: 10px;
+                padding: 12px;
+                text-align: center;
+                cursor: pointer;
+                background: #fff;
+            }
+            .fp-mini-card:hover { background: #f0f2f5; }
+            .fp-mini-card img {
+                width: 75px;
+                height: 75px;
+                border-radius: 50%;
+                object-fit: cover;
+                margin-bottom: 8px;
+            }
+            .fp-photo-item img {
+                width: 100%;
+                height: 180px;
+                object-fit: cover;
+                border-radius: 10px;
+                cursor: pointer;
             }
         `;
         document.head.appendChild(style);
@@ -10774,26 +10813,7 @@ window.updateFriendsCount = async function(targetUid = null) {
         console.error('❌ خطأ في تحديث العداد:', error.message);
     }
 };
-function restoreFriendProfileStyles() {
-    if (document.getElementById('friend-profile-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'friend-profile-styles';
-    style.textContent = `
-        .friend-profile-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f0f2f5; z-index: 9999; overflow-y: auto; direction: rtl; }
-        .friend-profile-header { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; }
-        .friend-cover-photo { height: 220px; background: linear-gradient(135deg, #1877f2, #42b72a); background-size: cover; background-position: center; position: relative; }
-        .friend-back-btn { position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.6); color: #fff; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-weight: bold; z-index: 10; }
-        .friend-profile-info-bar { max-width: 900px; margin: 0 auto; padding: 0 20px 20px; display: flex; align-items: flex-end; gap: 20px; position: relative; margin-top: -50px; flex-wrap: wrap; }
-        .friend-avatar-wrapper { width: 130px; height: 130px; border-radius: 50%; border: 4px solid #fff; background: #1877f2; overflow: hidden; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 48px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-        .friend-avatar-wrapper img { width: 100%; height: 100%; object-fit: cover; }
-        .friend-tabs-bar { max-width: 900px; margin: 0 auto; display: flex; gap: 10px; padding: 0 20px; border-top: 1px solid #ddd; }
-        .friend-tab-btn { padding: 14px 20px; border: none; background: transparent; font-weight: 600; color: #65676b; cursor: pointer; border-bottom: 3px solid transparent; }
-        .friend-tab-btn.active { color: #1877f2; border-bottom-color: #1877f2; }
-        .friend-tab-content { max-width: 900px; margin: 20px auto; padding: 0 15px; }
-    `;
-    document.head.appendChild(style);
-}
-restoreFriendProfileStyles();
+ 
 
  </script>
  
