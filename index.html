@@ -7645,15 +7645,18 @@ async deletePhoto(photoIndex, photoType = null) {
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.addEventListener('click', (e) => {
                     e.preventDefault();
-                    const page = e.target.dataset.page;
-                    this.showPage(page);
-                    
-                    document.querySelectorAll('.nav-item').forEach(nav => {
-                        nav.classList.remove('active');
-                    });
-                    e.target.classList.add('active');
-                });
+                    const navItem = e.currentTarget;
+                     const page = navItem.dataset.page;
+               if (!page) return;
+
+            this.showPage(page);
+            
+            document.querySelectorAll('.nav-item').forEach(nav => {
+                nav.classList.remove('active');
             });
+            navItem.classList.add('active');
+        });
+    });
 
             document.getElementById('confirmModal')?.addEventListener('click', (e) => {
                 if (e.target === document.getElementById('confirmModal')) {
@@ -8892,7 +8895,6 @@ async loadPublicPosts(reset = false) {
         const container = document.getElementById('publicPostsFeed');
         if (!container) return;
 
-        // عند إعادة التحميل
         if (reset) {
             container.innerHTML = `
                 <div style="text-align: center; padding: 40px; color: #65676b;">
@@ -8904,7 +8906,6 @@ async loadPublicPosts(reset = false) {
             this.hasMorePosts = true;
         }
 
-        // إعداد الاستعلام
         let query = db.collection('posts')
             .where('privacy', '==', 'public')
             .orderBy('timestamp', 'desc')
@@ -8918,43 +8919,41 @@ async loadPublicPosts(reset = false) {
 
         if (reset) container.innerHTML = '';
 
-        // إذا لم توجد منشورات
         if (snapshot.empty) {
-            container.innerHTML = `
-                <div class="no-posts-message">
-                    <i class="fas fa-newspaper"></i>
-                    <h3>لا توجد منشورات عامة</h3>
-                    <p>كن أول من ينشر في الصفحة العامة!</p>
-                </div>
-            `;
+            if (reset) {
+                container.innerHTML = `
+                    <div class="no-posts-message" style="text-align:center; padding:40px; color:#65676b;">
+                        <i class="fas fa-newspaper" style="font-size:40px; margin-bottom:10px;"></i>
+                        <h3>لا توجد منشورات عامة</h3>
+                        <p>كن أول من ينشر في الصفحة العامة!</p>
+                    </div>
+                `;
+            }
             this.hasMorePosts = false;
             return;
         }
 
-        // إزالة زر "تحميل المزيد" القديم إن وجد
         const existingButton = container.querySelector('.load-more-btn');
         if (existingButton) existingButton.remove();
 
-        // عرض المنشورات
         snapshot.forEach(doc => {
             const post = doc.data();
             const postElement = this.createPublicPostElement(post, doc.id);
             container.appendChild(postElement);
-            this.lastPost = doc; // تحديث آخر منشور للتحميل التدريجي
+            this.lastPost = doc;
         });
 
-        // زر تحميل المزيد
         if (snapshot.size >= 10) {
             this.addLoadMoreButton(container);
         }
 
     } catch (error) {
-       
+        console.error('❌ خطأ في تحميل المنشورات العامة:', error);
         const container = document.getElementById('publicPostsFeed');
         if (container) {
             container.innerHTML = `
-                <div class="no-posts-message">
-                    <i class="fas fa-exclamation-triangle" style="color: #ff4444;"></i>
+                <div class="no-posts-message" style="text-align:center; padding:30px; color:#ff4444;">
+                    <i class="fas fa-exclamation-triangle" style="font-size:32px; margin-bottom:10px;"></i>
                     <h3>حدث خطأ في تحميل المنشورات</h3>
                     <p>${error.message || 'يرجى المحاولة مرة أخرى'}</p>
                 </div>
@@ -8962,6 +8961,7 @@ async loadPublicPosts(reset = false) {
         }
     }
 }
+
 
 // مثال على زر التحميل
 addLoadMoreButton(container) {
@@ -12616,68 +12616,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 //===========================
  
-// حل مشكلة شريط التنقل - الإصدار المحسن
-document.addEventListener('DOMContentLoaded', function() {
-    const navItems = document.querySelectorAll('.nav-item:not(.store)');
-    const pageContents = {
-        'posts': document.getElementById('postsFeed'),
-        'public': document.getElementById('publicPage'),
-        'about': document.getElementById('aboutPage'),
-        'friends': document.getElementById('friendsPage'),
-        'photos': document.getElementById('photosPage'),
-        'videos': document.getElementById('videosPage'),
-        'more': document.getElementById('morePage')
-    };
 
-    // تهيئة جميع المحتويات
-    Object.values(pageContents).forEach(content => {
-        if(content) content.style.display = 'none';
-    });
-
-    // عرض المحتوى الأولي
-    if(pageContents.posts) {
-        pageContents.posts.style.display = 'block';
-    }
-
-    // إضافة حدث لكل عنصر تنقل
-    navItems.forEach(item => {
-        item.addEventListener('click', function(e) {
-            e.preventDefault();
-            
-            const pageId = this.getAttribute('data-page');
-            
-            // إزالة النشط من جميع العناصر
-            navItems.forEach(nav => {
-                nav.classList.remove('active');
-            });
-            
-            // إضافة النشط للعنصر الحالي
-            this.classList.add('active');
-            
-            // إخفاء جميع المحتويات
-            Object.values(pageContents).forEach(content => {
-                if(content) content.style.display = 'none';
-            });
-            
-            // عرض المحتوى المحدد
-            if(pageContents[pageId]) {
-                pageContents[pageId].style.display = 'block';
-            }
-            
-            console.log('تم التبديل إلى صفحة:', pageId);
-        });
-    });
-
-    // السماح لأيقونة المتجر بالعمل بشكل طبيعي
-    const storeLink = document.querySelector('.nav-item.store');
-    if(storeLink) {
-        storeLink.addEventListener('click', function(e) {
-            // لا تمنع السلوك الافتراضي للروابط الخارجية
-            // دعها تفتح الرابط بشكل طبيعي
-            console.log('فتح رابط المتجر الخارجي');
-        });
-    }
-});
 // 1. إيقاف جميع الفيديوهات النشطة (يوتيوب + MP4)
 function stopAllActiveVideos(exceptVideo) {
     // إيقاف فيديوهات MP4 (بدون لمس الفيديو المستثنى)
