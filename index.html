@@ -12702,14 +12702,14 @@ function startYouTubeVideo(boxElement) {
 
     stopAllActiveVideos(null);
 
-    var videoId = boxElement.getAttribute('data-id');
+    var videoId = (boxElement.getAttribute('data-id') || '').trim();
     if (!videoId) return;
 
     boxElement.setAttribute('data-active', '1');
     boxElement.innerHTML = '';
 
     var iframe = document.createElement('iframe');
-    iframe.src = 'https://youtube.com' + videoId + '?autoplay=1';
+    iframe.src = 'https://youtube.com' + encodeURIComponent(videoId) + '?autoplay=1';
     iframe.style.position = 'absolute';
     iframe.style.top = '0';
     iframe.style.left = '0';
@@ -12721,7 +12721,6 @@ function startYouTubeVideo(boxElement) {
 
     boxElement.appendChild(iframe);
 }
-
 // 3. إيقاف الفيديو عند تشغيل فيديو MP4 آخر
 document.addEventListener('play', function(e) {
     if (e.target && e.target.tagName === 'VIDEO') {
