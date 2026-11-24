@@ -10480,16 +10480,16 @@ function createFriendProfileOverlay() {
                 <button class="fp-tab-item" data-ftab="photos" onclick="window.switchFriendTab('photos')">الصور</button>
             </div>
             <div id="friendTab-posts" class="fp-tab-panel active">
-                <div id="friendPostsContainer"><div class="loading">جاري تحميل المنشورات...</div></div>
+                <div id="fpPostsContainer"></div>
             </div>
             <div id="friendTab-about" class="fp-tab-panel">
-                <div id="friendAboutContainer"></div>
+                <div id="fpAboutContainer"></div>
             </div>
             <div id="friendTab-friends" class="fp-tab-panel">
-                <div id="friendFriendsGrid" class="fp-grid"></div>
+                  <div id="friendFriendsGrid" class="friends-grid"></div>
             </div>
             <div id="friendTab-photos" class="fp-tab-panel">
-                <div id="friendPhotosGrid" class="fp-grid"></div>
+                <div id="friendPhotosGrid" class="photos-grid"></div>
             </div>
         </div>
     `;
@@ -10657,7 +10657,7 @@ window.switchFriendTab = function(tabName) {
 
 // 1. تحميل منشورات الصديق
 window.loadFriendPosts = async function(friendId) {
-    const container = document.getElementById('friendPostsContainer');
+    const container = document.getElementById('fpPostsContainer') || document.getElementById('friendPostsContainer');
     if (!container || !friendId) return;
 
     container.innerHTML = '<div style="text-align:center; padding:35px; color:#65676b;"><i class="fas fa-spinner fa-spin" style="font-size:24px; color:#1877f2;"></i><p style="margin-top:10px;">جاري تحميل المنشورات...</p></div>';
@@ -10693,19 +10693,73 @@ window.loadFriendPosts = async function(friendId) {
             return timeB - timeA;
         });
 
-        container.innerHTML = posts.map(post => createFriendPostHTML(post)).join('');
+        // بناء بطاقات المنشورات مباشرة بدون الاعتماد على دوال خارجية
+        container.innerHTML = posts.map(post => {
+            const authorName = post.authorName || post.userName || (currentFriendData && currentFriendData.name) || 'مستخدم';
+            const authorPhoto = post.authorPhoto || post.userPhoto || (currentFriendData && currentFriendData.profilePicture) || '';
+            const initial = authorName.charAt(0).toUpperCase();
+
+            let dateStr = 'الآن';
+            if (post.timestamp) {
+                const d = post.timestamp.toDate ? post.timestamp.toDate() : new Date(post.timestamp);
+                if (!isNaN(d.getTime())) {
+                    dateStr = d.toLocaleDateString('ar-LB', { year: 'numeric', month: 'short', day: 'numeric' });
+                }
+            }
+
+            const rawText = post.content || post.text || '';
+            const safeText = rawText
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .split('\r\n').join('<br>').split('\n').join('<br>');
+
+            const imageHTML = post.imageUrl
+                ? `<div style="margin-top:12px;"><img src="${post.imageUrl}" onclick="window.open('${post.imageUrl}', '_blank')" style="width:100%; max-height:450px; object-fit:cover; border-radius:10px; cursor:pointer;"></div>`
+                : '';
+
+            let videoHTML = '';
+            const vid = post.video || post.videoData;
+            if (vid && vid.type === 'youtube' && vid.id) {
+                videoHTML = `
+                    <div class="yt-box" data-id="${vid.id}" onclick="startYouTubeVideo(this)"
+                         style="margin:12px 0; position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:10px; background-color:#18191a; background-image:url('https://ytimg.com{vid.id}/hqdefault.jpg'); background-size:cover; background-position:center; cursor:pointer;">
+                        <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:60px; height:42px; background:#ff0000; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                            <i class="fas fa-play" style="color:white; font-size:18px; margin-left:3px;"></i>
+                        </div>
+                    </div>`;
+            } else if (vid && vid.type === 'direct' && vid.url) {
+                videoHTML = `<div style="margin:12px 0;"><video controls preload="metadata" style="width:100%; max-height:400px; border-radius:10px; background:#000;"><source src="${vid.url}" type="video/mp4"></video></div>`;
+            }
+
+            const avatarHTML = authorPhoto
+                ? `<img src="${authorPhoto}" style="width:44px; height:44px; border-radius:50%; object-fit:cover;">`
+                : `<div style="width:44px; height:44px; border-radius:50%; background:#4a6cf7; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:18px;">${initial}</div>`;
+
+            return `
+                <div class="post-card" style="background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); border:1px solid #e4e6eb;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                        ${avatarHTML}
+                        <div>
+                            <h4 style="margin:0; font-size:15px; color:#050505;">${authorName}</h4>
+                            <span style="font-size:12px; color:#65676b;">${dateStr}</span>
+                        </div>
+                    </div>
+                    ${safeText ? `<div style="font-size:15px; line-height:1.6; color:#050505; word-break:break-word;">${safeText}</div>` : ''}
+                    ${imageHTML}
+                    ${videoHTML}
+                </div>
+            `;
+        }).join('');
+
     } catch (error) {
         console.error('❌ خطأ في تحميل منشورات الصديق:', error);
         container.innerHTML = `<div style="text-align:center; padding:30px; color:#e41e3f;">حدث خطأ أثناء تحميل المنشورات: ${error.message}</div>`;
     }
 };
-
-// 2. تحميل بطاقة التعريف "حول" بنفس تصميم .intro-section
+// 2. تحميل بطاقة التعريف داخل الحاوية الفريدة fpAboutContainer
 window.loadFriendAbout = async function(data, friendId) {
-    const container = document.getElementById('friendAboutContainer');
+    const container = document.getElementById('fpAboutContainer') || document.getElementById('friendAboutContainer');
     if (!container) return;
 
-    // إذا لم تكن البيانات جاهزة بعد، نجلبها من قاعدة البيانات مباشرة
     let userData = data;
     if (!userData && friendId) {
         container.innerHTML = '<div style="text-align:center; padding:30px; color:#65676b;"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المعلومات...</div>';
@@ -10734,29 +10788,13 @@ window.loadFriendAbout = async function(data, friendId) {
     const bio = userData.bio || '';
 
     container.innerHTML = `
-        <div class="intro-section" style="background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e4e6eb;">
+        <div class="intro-section" style="background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.1); border:1px solid #e4e6eb;">
             <h4><i class="fas fa-info-circle"></i> التعريف</h4>
-            ${bio ? `<p style="text-align: center; color: #1c1e21; padding-bottom: 12px; border-bottom: 1px solid #e4e6eb; margin-bottom: 14px;">${bio}</p>` : ''}
-            <p>
-                <svg class="static-icon" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M12,11.5A2.5,2.5 0 0,1 9.5,9A2.5,2.5 0 0,1 12,6.5A2.5,2.5 0 0,1 14.5,9A2.5,2.5 0 0,1 12,11.5M12,2A7,7 0 0,0 5,9C5,14.25 12,22 12,22C12,22 19,14.25 19,9A7,7 0 0,0 12,2Z"></path>
-                </svg> ${location}
-            </p>
-            <p>
-                <svg class="static-icon" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M10,2H14A2,2 0 0,1 16,4V6H20A2,2 0 0,1 22,8V19A2,2 0 0,1 20,21H4C2.89,21 2,20.1 2,19V8C2,6.89 2.89,6 4,6H8V4C8,2.89 8.89,2 10,2M14,6V4H10V6H14Z"></path>
-                </svg> ${job}
-            </p>
-            <p>
-                <svg class="static-icon" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M12,3L1,9L12,15L21,10.09V17H23V9M5,13.18V17.18L12,21L19,17.18V13.18L12,17L5,13.18Z"></path>
-                </svg> ${education}
-            </p>
-            <p>
-                <svg class="static-icon" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M19,19H5V8H19M16,1V3H8V1H6V3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3H18V1M17,12H12V17H17V12Z"></path>
-                </svg> انضم منذ ${joinedYear}
-            </p>
+            ${bio ? `<p style="text-align:center; color:#1c1e21; padding-bottom:12px; border-bottom:1px solid #e4e6eb; margin-bottom:14px;">${bio}</p>` : ''}
+            <p><svg class="static-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12,11.5A2.5,2.5 0 0,1 9.5,9A2.5,2.5 0 0,1 12,6.5A2.5,2.5 0 0,1 14.5,9A2.5,2.5 0 0,1 12,11.5M12,2A7,7 0 0,0 5,9C5,14.25 12,22 12,22C12,22 19,14.25 19,9A7,7 0 0,0 12,2Z"></path></svg> ${location}</p>
+            <p><svg class="static-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10,2H14A2,2 0 0,1 16,4V6H20A2,2 0 0,1 22,8V19A2,2 0 0,1 20,21H4C2.89,21 2,20.1 2,19V8C2,6.89 2.89,6 4,6H8V4C8,2.89 8.89,2 10,2M14,6V4H10V6H14Z"></path></svg> ${job}</p>
+            <p><svg class="static-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12,3L1,9L12,15L21,10.09V17H23V9M5,13.18V17.18L12,21L19,17.18V13.18L12,17L5,13.18Z"></path></svg> ${education}</p>
+            <p><svg class="static-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M19,19H5V8H19M16,1V3H8V1H6V3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3H18V1M17,12H12V17H17V12Z"></path></svg> انضم منذ ${joinedYear}</p>
         </div>
     `;
 };
