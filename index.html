@@ -9113,7 +9113,9 @@ createVideoEmbedForPublic(videoData) {
     if (videoData.type === 'youtube' && videoData.id) {
         return `
             <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
-                 style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://ytimg.com{videoData.id}/hqdefault.jpg'), url('https://ytimg.com{videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                 style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a;
+                        background-image: url('https://i.ytimg.com/vi/${videoData.id}/hqdefault.jpg'), url('https://i.ytimg.com/vi/${videoData.id}/mqdefault.jpg');
+                        background-size: cover; background-position: center; cursor: pointer;">
                 <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
                     <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
                 </div>
