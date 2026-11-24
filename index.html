@@ -10389,7 +10389,7 @@ window.viewFriendProfile = async function(friendId) {
             document.body.appendChild(overlay);
         }
 
-        // إعادة تعيين علامات التحميل السابقة لتبويبات الصديق الجديد
+        // إعادة تعيين حاويات التبويبات
         ['friendPostsContainer', 'friendAboutContainer', 'friendFriendsContainer', 'friendPhotosContainer'].forEach(id => {
             const el = document.getElementById(id);
             if (el) {
@@ -10402,8 +10402,12 @@ window.viewFriendProfile = async function(friendId) {
         overlay.scrollTop = 0;
         document.body.style.overflow = 'hidden';
 
-        // 1. جلب بيانات الصديق الأساسية أولاً وبشكل مستقل لضمان ظهور الاسم والصورة فوراً
-        const userDoc = await db.collection('users').doc(friendId).get();
+        // 1. جلب بيانات الصديق وفحص حالة الصداقة معاً قبل تحميل المنشورات
+        const [userDoc, status] = await Promise.all([
+            db.collection('users').doc(friendId).get(),
+            checkFriendshipStatus(currentUser.uid, friendId).catch(() => 'none')
+        ]);
+
         if (!userDoc.exists) {
             alert('المستخدم غير موجود');
             window.closeFriendProfile();
@@ -10411,27 +10415,27 @@ window.viewFriendProfile = async function(friendId) {
         }
 
         currentFriendData = userDoc.data();
-        renderFriendProfileHeader(currentFriendData, friendId);
-        loadFriendAbout(currentFriendData); // تجهيز تبويب "حول" فوراً
+        friendshipStatus = status;
 
-        // 2. تشغيل تبويب المنشورات وتحديث عداد أصدقاء الصديق
-        window.switchFriendTab('posts');
-        if (typeof window.updateFriendsCount === 'function') {
-            window.updateFriendsCount(friendId);
+        // 2. تحديث الهيدر وأزرار الصداقة وتبويب "حول"
+        renderFriendProfileHeader(currentFriendData, friendId);
+        renderFriendActionButton();
+        if (typeof window.loadFriendAbout === 'function') {
+            window.loadFriendAbout(currentFriendData);
         }
 
-        // 3. فحص حالة الصداقة بشكل منفصل حتى لا يعطل عرض المعلومات إذا تأخر
-        try {
-            friendshipStatus = await checkFriendshipStatus(currentUser.uid, friendId);
-            renderFriendActionButton();
-        } catch (statusErr) {
-            console.warn('تنبيه في فحص حالة الصداقة:', statusErr);
+        // 3. الآن بعد معرفة friendshipStatus، نفتح تبويب المنشورات لتظهر المنشورات العامة ومنشورات الأصدقاء معاً
+        window.switchFriendTab('posts');
+
+        if (typeof window.updateFriendsCount === 'function') {
+            window.updateFriendsCount(friendId);
         }
 
     } catch (error) {
         console.error('❌ خطأ في فتح ملف الصديق:', error);
     }
 };
+
 // 3. إغلاق ملف الصديق واستعادة حالة الواجهة الرئيسية نظيفة
 window.closeFriendProfile = function() {
     if (typeof stopAllActiveVideos === 'function') {
@@ -10593,7 +10597,6 @@ window.loadFriendPosts = async function(friendId) {
     container.innerHTML = createLoadingHTML('posts');
 
     try {
-        // البحث عن منشورات الصديق بأكثر من اسم حقل محتمل لضمان الجلب
         let snapshot = await db.collection('posts').where('userId', '==', fid).get();
         if (snapshot.empty) {
             snapshot = await db.collection('posts').where('authorId', '==', fid).get();
@@ -10616,7 +10619,6 @@ window.loadFriendPosts = async function(friendId) {
         snapshot.forEach(doc => {
             const data = doc.data();
             const privacy = data.privacy || 'public';
-            // عرض المنشورات العامة، ومنشورات الأصدقاء إذا كنتما صديقين
             if (privacy === 'public' || (privacy === 'friends' && friendshipStatus === 'friends')) {
                 posts.push({ id: doc.id, ...data });
             }
@@ -10631,7 +10633,6 @@ window.loadFriendPosts = async function(friendId) {
             return;
         }
 
-        // ترتيب المنشورات من الأحدث إلى الأقدم
         posts.sort((a, b) => {
             const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
             const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
@@ -10645,9 +10646,6 @@ window.loadFriendPosts = async function(friendId) {
         container.innerHTML = createErrorHTML('posts');
     }
 };
-
-// ربط الاسم العادي بنفس الدالة لتفادي أي تعارض في الاستدعاء
-const loadFriendPosts = window.loadFriendPosts;
 
 // التبديل بين تبويبات صفحة الصديق
 window.switchFriendTab = function(tabName) {
@@ -10684,60 +10682,7 @@ window.switchFriendTab = function(tabName) {
 
 
 // 8. تحميل منشورات الصديق مع مشغل الفيديو الموحد
-async function loadFriendPosts(friendId) {
-    const container = document.getElementById('friendPostsContainer');
-    if (!container) return;
 
-    container.innerHTML = '<div class="loading" style="text-align:center; padding:30px; color:#65676b;"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنشورات...</div>';
-
-    try {
-        let snapshot = await db.collection('posts')
-            .where('userId', '==', friendId)
-            .get();
-
-        if (snapshot.empty) {
-            snapshot = await db.collection('posts')
-                .where('authorId', '==', friendId)
-                .get();
-        }
-
-        if (snapshot.empty) {
-            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات لهذا المستخدم</div>';
-            return;
-        }
-
-        let posts = [];
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            const privacy = data.privacy || 'public';
-            if (privacy === 'public' || privacy === 'friends') {
-                posts.push({ id: doc.id, ...data });
-            }
-        });
-
-        if (posts.length === 0) {
-            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات عامة لعرضها</div>';
-            return;
-        }
-
-        posts.sort((a, b) => {
-            const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
-            const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
-            return timeB - timeA;
-        });
-
-        container.innerHTML = posts.map(post => createFriendPostHTML(post)).join('');
-
-    } catch (error) {
-        console.error('❌ خطأ في تحميل منشورات الصديق:', error);
-        container.innerHTML = `
-            <div class="error-state" style="text-align:center; padding:30px; color:#e41e3f;">
-                <p>حدث خطأ أثناء تحميل المنشورات</p>
-                <small>${error.message}</small>
-            </div>
-        `;
-    }
-}
 // دالة بناء بطاقة منشور الصديق (تدعم النصوص، الصور، والفيديوهات الموحدة)
 function createFriendPostHTML(post) {
     const authorName = post.authorName || post.userName || (currentFriendData && currentFriendData.name) || 'مستخدم';
@@ -10824,7 +10769,6 @@ window.loadFriendAbout = function(data) {
     const container = document.getElementById('friendAboutContainer');
     if (!container || !data) return;
 
-    // استخراج سنة الانضمام من createdAt أو timestamp
     let joinedYear = '2025';
     const rawDate = data.createdAt || data.joinedAt || data.timestamp;
     if (rawDate) {
@@ -10834,9 +10778,9 @@ window.loadFriendAbout = function(data) {
         }
     }
 
-    const location = data.location || data.city || data.address || '';
-    const job = data.job || data.work || data.profession || '';
-    const education = data.education || data.study || data.degree || '';
+    const location = data.location || data.city || data.address || 'غير محدد';
+    const job = data.job || data.work || data.profession || 'غير محدد';
+    const education = data.education || data.study || data.degree || 'غير محدد';
     const bio = data.bio || '';
 
     container.innerHTML = `
@@ -10844,26 +10788,23 @@ window.loadFriendAbout = function(data) {
             <h4><i class="fas fa-info-circle"></i> التعريف</h4>
             ${bio ? `<p style="text-align: center; color: #1c1e21; padding-bottom: 12px; border-bottom: 1px solid #e4e6eb; margin-bottom: 14px;">${bio}</p>` : ''}
             
-            ${location ? `
             <p>
                 <svg class="static-icon" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M12,11.5A2.5,2.5 0 0,1 9.5,9A2.5,2.5 0 0,1 12,6.5A2.5,2.5 0 0,1 14.5,9A2.5,2.5 0 0,1 12,11.5M12,2A7,7 0 0,0 5,9C5,14.25 12,22 12,22C12,22 19,14.25 19,9A7,7 0 0,0 12,2Z"></path>
                 </svg> ${location}
-            </p>` : ''}
+            </p>
 
-            ${job ? `
             <p>
                 <svg class="static-icon" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M10,2H14A2,2 0 0,1 16,4V6H20A2,2 0 0,1 22,8V19A2,2 0 0,1 20,21H4C2.89,21 2,20.1 2,19V8C2,6.89 2.89,6 4,6H8V4C8,2.89 8.89,2 10,2M14,6V4H10V6H14Z"></path>
                 </svg> ${job}
-            </p>` : ''}
+            </p>
 
-            ${education ? `
             <p>
                 <svg class="static-icon" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M12,3L1,9L12,15L21,10.09V17H23V9M5,13.18V17.18L12,21L19,17.18V13.18L12,17L5,13.18Z"></path>
                 </svg> ${education}
-            </p>` : ''}
+            </p>
 
             <p>
                 <svg class="static-icon" viewBox="0 0 24 24">
@@ -10873,8 +10814,6 @@ window.loadFriendAbout = function(data) {
         </div>
     `;
 };
-
-const loadFriendAbout = window.loadFriendAbout;
 
 // 10. تحميل أصدقاء الصديق
 async function loadFriendFriendsList(friendId) {
