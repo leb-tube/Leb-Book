@@ -10586,19 +10586,29 @@ window.handleUnfriendFromProfile = async function(friendId) {
 // 7. التبديل بين تبويبات ملف الصديق
 // ربط الدالة على window لتكون متاحة في كل مكان
 window.loadFriendPosts = async function(friendId) {
+    const fid = friendId || window.currentFriendId || currentFriendId;
     const container = document.getElementById('friendPostsContainer');
-    if (!container || !friendId) return;
+    if (!container || !fid) return;
 
-    container.innerHTML = '<div class="loading" style="text-align:center; padding:30px; color:#65676b;"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنشورات...</div>';
+    container.innerHTML = createLoadingHTML('posts');
 
     try {
-        let snapshot = await db.collection('posts').where('userId', '==', friendId).get();
+        // البحث عن منشورات الصديق بأكثر من اسم حقل محتمل لضمان الجلب
+        let snapshot = await db.collection('posts').where('userId', '==', fid).get();
         if (snapshot.empty) {
-            snapshot = await db.collection('posts').where('authorId', '==', friendId).get();
+            snapshot = await db.collection('posts').where('authorId', '==', fid).get();
+        }
+        if (snapshot.empty) {
+            snapshot = await db.collection('posts').where('uid', '==', fid).get();
         }
 
         if (snapshot.empty) {
-            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات لهذا المستخدم</div>';
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; background: #fff; border-radius: 12px; color: #65676b; border: 1px solid #e4e6eb;">
+                    <i class="fas fa-newspaper" style="font-size: 36px; margin-bottom: 10px; opacity: 0.6;"></i>
+                    <p style="margin: 0; font-size: 15px;">لا توجد منشورات لعرضها لهذا المستخدم</p>
+                </div>
+            `;
             return;
         }
 
@@ -10606,16 +10616,22 @@ window.loadFriendPosts = async function(friendId) {
         snapshot.forEach(doc => {
             const data = doc.data();
             const privacy = data.privacy || 'public';
-            if (privacy === 'public' || privacy === 'friends') {
+            // عرض المنشورات العامة، ومنشورات الأصدقاء إذا كنتما صديقين
+            if (privacy === 'public' || (privacy === 'friends' && friendshipStatus === 'friends')) {
                 posts.push({ id: doc.id, ...data });
             }
         });
 
         if (posts.length === 0) {
-            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات عامة لعرضها</div>';
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; background: #fff; border-radius: 12px; color: #65676b; border: 1px solid #e4e6eb;">
+                    <p style="margin: 0; font-size: 15px;">لا توجد منشورات عامة لعرضها</p>
+                </div>
+            `;
             return;
         }
 
+        // ترتيب المنشورات من الأحدث إلى الأقدم
         posts.sort((a, b) => {
             const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
             const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
@@ -10623,11 +10639,15 @@ window.loadFriendPosts = async function(friendId) {
         });
 
         container.innerHTML = posts.map(post => createFriendPostHTML(post)).join('');
+
     } catch (error) {
         console.error('❌ خطأ في تحميل منشورات الصديق:', error);
-        container.innerHTML = `<div style="text-align:center; padding:30px; color:#e41e3f;">حدث خطأ أثناء تحميل المنشورات: ${error.message}</div>`;
+        container.innerHTML = createErrorHTML('posts');
     }
 };
+
+// ربط الاسم العادي بنفس الدالة لتفادي أي تعارض في الاستدعاء
+const loadFriendPosts = window.loadFriendPosts;
 
 // التبديل بين تبويبات صفحة الصديق
 window.switchFriendTab = function(tabName) {
@@ -10800,21 +10820,62 @@ function createFriendPostHTML(post) {
 }
 
 // 9. تحميل معلومات "حول" الصديق
-function loadFriendAbout(data) {
+window.loadFriendAbout = function(data) {
     const container = document.getElementById('friendAboutContainer');
-    if (!container) return;
+    if (!container || !data) return;
+
+    // استخراج سنة الانضمام من createdAt أو timestamp
+    let joinedYear = '2025';
+    const rawDate = data.createdAt || data.joinedAt || data.timestamp;
+    if (rawDate) {
+        const d = rawDate.toDate ? rawDate.toDate() : new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+            joinedYear = d.getFullYear();
+        }
+    }
+
+    const location = data.location || data.city || data.address || '';
+    const job = data.job || data.work || data.profession || '';
+    const education = data.education || data.study || data.degree || '';
+    const bio = data.bio || '';
 
     container.innerHTML = `
-        <div style="background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e4e6eb;">
-            <h3 style="margin-top: 0; margin-bottom: 16px; color: #050505; font-size: 18px;">معلومات عن ${data.name || 'المستخدم'}</h3>
-            <div style="display: flex; flex-direction: column; gap: 12px; color: #1c1e21; font-size: 15px;">
-                <div><i class="fas fa-briefcase" style="width: 24px; color: #65676b;"></i> <strong>العمل:</strong> ${data.job || 'غير محدد'}</div>
-                <div><i class="fas fa-map-marker-alt" style="width: 24px; color: #65676b;"></i> <strong>المكان:</strong> ${data.location || data.city || 'غير محدد'}</div>
-                <div><i class="fas fa-info-circle" style="width: 24px; color: #65676b;"></i> <strong>نبذة:</strong> ${data.bio || 'لا توجد نبذة شخصية'}</div>
-            </div>
+        <div class="intro-section" style="background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e4e6eb;">
+            <h4><i class="fas fa-info-circle"></i> التعريف</h4>
+            ${bio ? `<p style="text-align: center; color: #1c1e21; padding-bottom: 12px; border-bottom: 1px solid #e4e6eb; margin-bottom: 14px;">${bio}</p>` : ''}
+            
+            ${location ? `
+            <p>
+                <svg class="static-icon" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M12,11.5A2.5,2.5 0 0,1 9.5,9A2.5,2.5 0 0,1 12,6.5A2.5,2.5 0 0,1 14.5,9A2.5,2.5 0 0,1 12,11.5M12,2A7,7 0 0,0 5,9C5,14.25 12,22 12,22C12,22 19,14.25 19,9A7,7 0 0,0 12,2Z"></path>
+                </svg> ${location}
+            </p>` : ''}
+
+            ${job ? `
+            <p>
+                <svg class="static-icon" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M10,2H14A2,2 0 0,1 16,4V6H20A2,2 0 0,1 22,8V19A2,2 0 0,1 20,21H4C2.89,21 2,20.1 2,19V8C2,6.89 2.89,6 4,6H8V4C8,2.89 8.89,2 10,2M14,6V4H10V6H14Z"></path>
+                </svg> ${job}
+            </p>` : ''}
+
+            ${education ? `
+            <p>
+                <svg class="static-icon" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M12,3L1,9L12,15L21,10.09V17H23V9M5,13.18V17.18L12,21L19,17.18V13.18L12,17L5,13.18Z"></path>
+                </svg> ${education}
+            </p>` : ''}
+
+            <p>
+                <svg class="static-icon" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M19,19H5V8H19M16,1V3H8V1H6V3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3H18V1M17,12H12V17H17V12Z"></path>
+                </svg> انضم منذ ${joinedYear}
+            </p>
         </div>
     `;
-}
+};
+
+const loadFriendAbout = window.loadFriendAbout;
+
 // 10. تحميل أصدقاء الصديق
 async function loadFriendFriendsList(friendId) {
     const grid = document.getElementById('friendFriendsGrid');
