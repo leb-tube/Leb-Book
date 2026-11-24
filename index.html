@@ -6095,28 +6095,32 @@ clearAllIntervals() {
             }
         }
   async logout() {
-            try {
-                await auth.signOut();
-                
-                const sessionInfo = JSON.parse(sessionStorage.getItem('currentSession') || '{}');
-                if (sessionInfo.userId && sessionInfo.sessionId) {
-                    const dataKey = `lebBook_data_${sessionInfo.userId}_${sessionInfo.sessionId}`;
-                    localStorage.removeItem(dataKey);
-                }
-                 stopAllMedia();
-                sessionStorage.clear();
-                 
-                this.currentUser = null;
-                this.userData = null;
-                
-                this.updateUIAfterLogout();
-                this.showMessage('تم تسجيل الخروج بنجاح', 'success');
-                window.location.reload();
-            } catch (error) {
-                console.error('Error logging out:', error);
-                this.showMessage('حدث خطأ أثناء تسجيل الخروج', 'error');
-            }
+    try {
+        // 1. إيقاف جميع الفيديوهات فوراً قبل أي شيء
+        this.stopAllMedia();
+
+        await auth.signOut();
+        
+        const sessionInfo = JSON.parse(sessionStorage.getItem('currentSession') || '{}');
+        if (sessionInfo.userId && sessionInfo.sessionId) {
+            const dataKey = `lebBook_data_${sessionInfo.userId}_${sessionInfo.sessionId}`;
+            localStorage.removeItem(dataKey);
         }
+         
+        sessionStorage.clear();
+         
+        this.currentUser = null;
+        this.userData = null;
+        
+        this.updateUIAfterLogout();
+        this.showMessage('تم تسجيل الخروج بنجاح', 'success');
+        window.location.reload();
+    } catch (error) {
+        console.error('Error logging out:', error);
+        this.showMessage('حدث خطأ أثناء تسجيل الخروج', 'error');
+    }
+}
+
 
         openAuthModal(tab = 'login') {
             document.getElementById('authModal').classList.add('active');
