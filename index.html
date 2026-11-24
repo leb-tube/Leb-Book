@@ -7728,15 +7728,17 @@ async deletePhoto(photoIndex, photoType = null) {
                         this.loadAboutInfo();
                     }
                     break;
-   
+                 const friendsSection = document.querySelector('.friends-section');
+                    if (friendsSection) {
+                       friendsSection.style.display = 'none';
+                       friendsSection.classList.remove('active');
+                     }
                 case 'friends':
-                    const friendsPage = document.getElementById('friendsPage');
-                    if (friendsPage) {
-                        friendsPage.style.display = 'block';
-                        friendsPage.classList.add('active');
-                         
-                    }
-                    break;
+                     if (friendsSection) {
+                     friendsSection.style.display = 'block';
+                     friendsSection.classList.add('active');
+                     }
+                 break;
                     
                 case 'photos':
                     const photosPage = document.getElementById('photosPage');
@@ -7777,7 +7779,6 @@ async deletePhoto(photoIndex, photoType = null) {
             }
         }
 
-        
 
         async loadPhotosPage() {
             if (window.photoManager) {
@@ -9458,994 +9459,8 @@ window.addEventListener('scroll', () => {
     });
 });
 // ================= Tabs =================
-let requestsLoaded = false;
-
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-    btn.classList.add('active');
-
-    const tabId = btn.dataset.tab;
-    const tab = document.getElementById(tabId);
-    if (tab) tab.classList.add('active');
-
-    // 🔥 هنا فقط
-    if (tabId === 'requests-friends-tab' && !requestsLoaded) {
-      requestsLoaded = true;
-      loadRequests(auth.currentUser.uid);
-    }
-  });
-});
-
-
-
-// ================= Auth =================
-firebase.auth().onAuthStateChanged(function(user) {
-  if (user) {
-    // فقط عندما يكون المستخدم مسجلاً
-    loadFriends(user.uid);
-    loadSuggested(user.uid);
-  }
-  // إذا لم يكن مسجلاً، لا تفعل شيئاً ولا تظهر alert
-});
-
  
-
-// ================= Friends =================
-async function loadFriendRequests(userId) {
-  const container = document.getElementById('friendRequests');
-  if (!container) return;
-
-  db.collection('friendRequests')
-    .where('to', '==', userId)
-    .where('status', '==', 'pending')
-    .onSnapshot(async snapshot => {
-      if (snapshot.empty) {
-        container.innerHTML = '<div class="no-requests"><p>لا توجد طلبات معلقة</p></div>';
-        return;
-      }
-
-      let html = '';
-      for (const doc of snapshot.docs) {
-        const senderId = doc.data().from;
-        const userSnap = await db.collection('users').doc(senderId).get();
-        if (!userSnap.exists) continue;
-
-        const userData = userSnap.data();
-        const name = userData.name || 'مستخدم';
-        const photo = userData.profilePicture || userData.photoURL || '';
-        
-        // توليد SVG كخلفية احتياطية
-        const char = name.charAt(0).toUpperCase();
-        const fallbackSVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
-          <svg xmlns="www.w3.org" width="50" height="50">
-            <rect width="100%" height="100%" fill="#4a6cf7"/>
-            <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="20" font-family="Arial" font-weight="bold">${char}</text>
-          </svg>`)}`;
-
-        html += `
-          <div class="request-card" id="req-${doc.id}">
-            <div class="user-info">
-              <!-- استخدام الخلفية المزدوجة يمنع الارتجاف نهائياً -->
-              <div class="user-img-container" 
-                   style="width:50px; height:50px; border-radius:50%; flex-shrink:0;
-                          background-image: url('${photo}'), url('${fallbackSVG}'); 
-                          background-size: cover; background-position: center;
-                          background-repeat: no-repeat; border: 2px solid #eee;">
-              </div>
-              <span class="user-name" style="margin-right:10px;">${name}</span>
-            </div>
-            <div class="action-buttons">
-              <button onclick="handleAccept('${doc.id}', '${senderId}', this)" class="btn-accept">قبول</button>
-              <button onclick="handleReject('${doc.id}', this)" class="btn-reject">رفض</button>
-            </div>
-          </div>
-        `;
-      }
-      container.innerHTML = html;
-    });
-}
-
-
-// ================= Requests =================
- 
-async function loadFriendRequests(userId) {
-  const container = document.getElementById('friendRequests');
-
-  db.collection('friendRequests')
-    .where('to', '==', userId)
-    .where('status', '==', 'pending')
-    .onSnapshot(async snapshot => {
-
-      if (snapshot.empty) {
-        container.innerHTML = '<p class="empty-msg">لا توجد طلبات صداقة</p>';
-        return;
-      }
-
-      let html = '';
-
-      for (const doc of snapshot.docs) {
-        const data = doc.data();
-        const senderId = data.from;
-
-        // ✅ جلب بيانات المرسل من users
-        const userSnap = await db.collection('users').doc(senderId).get();
-        if (!userSnap.exists) continue;
-
-        const userData = userSnap.data();
-        const avatar = resolveUserPhoto(userData);
-        // استخدام الـ Div مع Background Image يمنع الارتجاف نهائياً
-         html += `
-         <div class="request-card">
-            <div class="user-info">
-              <img src="${avatar}"
-                   class="user-img"
-                   onerror="this.src='${DEFAULT_AVATAR}'">
-              <span class="user-name">${userData.name || 'مستخدم'}</span>
-            </div>
-
-            <div class="action-buttons">
-              <button onclick="handleAccept('${doc.id}', '${senderId}')"
-                      class="btn-accept">قبول</button>
-              <button onclick="handleReject('${doc.id}')"
-                      class="btn-reject">رفض</button>
-            </div>
-          </div>
-        `;
-      }
-      container.innerHTML = html;
-    });
-}
- 
-
-
-// دالة القبول
-async function handleAccept(requestId, fromUserId) {
-  try {
-    const currentUser = firebase.auth().currentUser;
-    const batch = db.batch();
-
-    // 1. تحديث حالة الطلب
-    const requestRef = db.collection('friendRequests').doc(requestId);
-    batch.update(requestRef, { status: 'accepted' });
-
-    // 2. إضافة الصداقة للطرفين
-    const myFriendRef = db.collection('users').doc(currentUser.uid).collection('friends').doc(fromUserId);
-    const theirFriendRef = db.collection('users').doc(fromUserId).collection('friends').doc(currentUser.uid);
-
-    batch.set(myFriendRef, { friendId: fromUserId, date: new Date() });
-    batch.set(theirFriendRef, { friendId: currentUser.uid, date: new Date() });
-
-    await batch.commit();
-    console.log("تم قبول الصداقة");
-  } catch (error) {
-    console.error("خطأ في القبول:", error);
-  }
-}
-
-// دالة الرفض
-async function handleReject(requestId) {
-  await db.collection('friendRequests').doc(requestId).update({ status: 'rejected' });
-}
-// تأكد أن الاسم هنا يطابق الاسم الموجود في خطأ الـ Console
-async function createSafeRequestCard(requestId, requestData) {
-    // جلب بيانات المرسل الفعلية لضمان حداثتها
-    const senderSnap = await db.collection('users').doc(requestData.from).get();
-    const senderData = senderSnap.exists ? senderSnap.data() : {};
-    
-    const userName = senderData.name || 'مستخدم';
-    const userPhoto = senderData.photoURL || 'default-avatar.png'; // استخدم رابط افتراضي صحيح
-
-    return `
-        <div class="friend-request-card" id="request-${requestId}">
-            <div class="request-content">
-                <img src="${userPhoto}" class="avatar-image" onerror="this.src='default-avatar.png';">
-                <div class="user-details">
-                    <h4 class="user-name">${userName}</h4>
-                </div>
-            </div>
-            <div class="request-actions">
-                <button class="action-btn accept-btn" onclick="handleAcceptRequest('${requestId}', '${requestData.from}', this)">
-                    قبول
-                </button>
-                <button class="action-btn reject-btn" onclick="handleRejectRequest('${requestId}', this)">
-                    رفض
-                </button>
-            </div>
-        </div>
-    `;
-}
-
- // انتظر حتى يتم تحميل الصفحة
-document.addEventListener('DOMContentLoaded', function() {
-    // الحصول على جميع عناصر التنقل
-    const navItems = document.querySelectorAll('.nav-item');
-    
-    // إضافة حدث النقر لكل عنصر
-    navItems.forEach(item => {
-        item.addEventListener('click', function(e) {
-            e.preventDefault(); // منع السلوك الافتراضي للرابط
-            
-            // إزالة الكلاس active من جميع العناصر
-            navItems.forEach(nav => nav.classList.remove('active'));
-            
-            // إضافة الكلاس active للعنصر المحدد
-            this.classList.add('active');
-            
-            // الحصول على الصفحة المحددة
-            const page = this.getAttribute('data-page');
-            
-            // إظهار/إخفاء الأقسام حسب الصفحة المحددة
-            if (page === 'friends') {
-                // إظهار قسم الأصدقاء
-                const friendsSection = document.querySelector('.friends-section');
-                if (friendsSection) {
-                    friendsSection.classList.add('active');
-                }
-                // يمكنك إخفاء الأقسام الأخرى هنا إذا كان لديك أقسام أخرى
-            } else {
-                // إخفاء قسم الأصدقاء عند اختيار أي قسم آخر
-                const friendsSection = document.querySelector('.friends-section');
-                if (friendsSection) {
-                    friendsSection.classList.remove('active');
-                }
-            }
-            
-            console.log('تم اختيار صفحة:', page);
-        });
-    });
-});
   
- 
- //=========================================
-// دالة محسنة لتحميل الطلبات
-window.loadRequests = function(uid) {
-  console.log('تحميل طلبات للمستخدم:', uid);
-  
-  const container = document.getElementById('friendRequests');
-  if (!container) {
-    console.error('لم يتم العثور على عنصر friendRequests');
-    return;
-  }
-  
-  container.innerHTML = '<div class="loading">جاري تحميل الطلبات...</div>';
-  
-  // استخدام setTimeout لمنع حجب الواجهة
-  setTimeout(() => {
-    loadRequestsData(uid, container);
-  }, 50);
-};
-
-async function loadRequestsData(uid, container) {
-  // الاستماع المباشر للتغييرات
-  db.collection('friendRequests')
-    .where('to', '==', uid)
-    .where('status', '==', 'pending')
-    .onSnapshot(async (snapshot) => {
-      if (snapshot.empty) {
-        container.innerHTML = '<div class="no-requests">لا توجد طلبات معلقة</div>';
-        return;
-      }
-
-      let html = '';
-      // نستخدم for...of لمعالجة الـ await داخل الحلقة
-      for (const doc of snapshot.docs) {
-        html += await createSafeRequestCard(doc.id, doc.data());
-      }
-      container.innerHTML = html;
-    }, (error) => {
-      console.error("Snapshot error:", error);
-      container.innerHTML = "خطأ في الاتصال";
-    });
-}
-async function createSafeRequestCard(requestId, requestData) {
-    // جلب بيانات المرسل لضمان دقة الصورة والاسم
-    const senderSnap = await db.collection('users').doc(requestData.from).get();
-    const senderData = senderSnap.exists ? senderSnap.data() : {};
-    
-    const userName = senderData.name || 'مستخدم';
-    const userPhoto = senderData.profilePicture || senderData.photoURL;
-
-    // توليد SVG يحتوي على أول حرف من الاسم (يمنع الارتجاف لأنه كود وليس ملف)
-    const char = userName.charAt(0).toUpperCase();
-    const fallbackSVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
-      <svg xmlns="www.w3.org" width="50" height="50">
-        <rect width="100%" height="100%" fill="#4a6cf7"/>
-        <text x="50%" y="55%" text-anchor="middle" fill="white" font-size="20" font-family="Arial" font-weight="bold">${char}</text>
-      </svg>`)}`;
-
-    return `
-        <div class="friend-request-card" id="request-${requestId}">
-            <div class="request-content">
-                <div class="user-avatar">
-                    <img src="${userPhoto || fallbackSVG}" 
-                         class="avatar-image" 
-                         /* السر في حل الارتجاف هو تصفير onerror فور استدعائه */
-                         onerror="this.onerror=null; this.src='${fallbackSVG}';">
-                </div>
-                <div class="user-details">
-                    <h4 class="user-name">${userName}</h4>
-                </div>
-            </div>
-            <div class="request-actions">
-                <button class="action-btn accept-btn" onclick="handleAcceptRequest('${requestId}', '${requestData.from}', this)">
-                    قبول
-                </button>
-                <button class="action-btn reject-btn" onclick="handleRejectRequest('${requestId}', this)">
-                    رفض
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-//====================حذف الطرفين======================
-
-window.removeFriend = async function(friendId) {
-    if (!confirm('هل أنت متأكد من إلغاء الصداقة؟')) return;
-
-    try {
-        const currentUser = firebase.auth().currentUser;
-        if (!currentUser) return;
-
-        const batch = db.batch();
-
-        // مرجع الصديق في قائمتي
-        const myFriendRef = db.collection('users').doc(currentUser.uid).collection('friends').doc(friendId);
-        // مرجعي في قائمة الصديق
-        const theirFriendRef = db.collection('users').doc(friendId).collection('friends').doc(currentUser.uid);
-
-        batch.delete(myFriendRef);
-        batch.delete(theirFriendRef);
-
-        await batch.commit();
-        
-        // إعادة تحميل القائمة لتحديث الواجهة
-        loadFriends(currentUser.uid);
-        alert('تمت إزالة الصديق بنجاح');
-    } catch (error) {
-        console.error("خطأ في إلغاء الصداقة:", error);
-        alert('حدث خطأ أثناء المحاولة');
-    }
-};
-
-
-
-// ============ تعريف الدوال الأساسية أولاً ============
- window.handleAcceptRequest = async function(requestId, fromUserId, button) {
-    const originalText = button.innerHTML;
-    try {
-        button.disabled = true;
-        button.innerHTML = "جاري...";
-        
-        const currentUser = firebase.auth().currentUser;
-        if (!currentUser) throw new Error("يجب تسجيل الدخول");
-
-        const batch = db.batch();
-
-        // 1. تحديث حالة الطلب
-        const requestRef = db.collection('friendRequests').doc(requestId);
-        batch.update(requestRef, { status: 'accepted' });
-
-        // 2. إضافة الصداقة للطرفين (Sub-collection)
-        const myFriendRef = db.collection('users').doc(currentUser.uid).collection('friends').doc(fromUserId);
-        const theirFriendRef = db.collection('users').doc(fromUserId).collection('friends').doc(currentUser.uid);
-
-        batch.set(myFriendRef, { friendId: fromUserId, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-        batch.set(theirFriendRef, { friendId: currentUser.uid, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-
-        await batch.commit();
-        
-        // إزالة الكارد من الواجهة
-        document.getElementById(`request-${requestId}`)?.remove();
-        
-        // تحديث قائمة الأصدقاء تلقائياً إذا كانت الدالة موجودة
-        if (typeof loadFriends === 'function') loadFriends(currentUser.uid);
-
-    } catch (error) {
-        console.error("خطأ في قبول الطلب:", error);
-        button.disabled = false;
-        button.innerHTML = originalText;
-        alert("حدث خطأ، حاول مرة أخرى");
-    }
-};
-
-
-
-// دالة رفض الطلب
-window.handleRejectRequest = async function(requestId, button) {
-    try {
-        button.disabled = true;
-        await db.collection('friendRequests').doc(requestId).update({
-            status: 'rejected',
-            respondedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        const card = document.getElementById(`request-${requestId}`);
-        if (card) card.remove();
-    } catch (error) {
-        console.error("خطأ في الرفض:", error);
-        button.disabled = false;
-    }
-};
-
-
-// 3. دالة إضافة الأصدقاء
-async function addAsFriends(userId1, userId2) {
-  try {
-    const batch = db.batch();
-    
-    // جلب بيانات المستخدمين لجعل سجل الصداقة يحتوي على الاسم والصورة (لسرعة العرض لاحقاً)
-    const user1Doc = await db.collection('users').doc(userId1).get();
-    const user2Doc = await db.collection('users').doc(userId2).get();
-    
-    const user1Data = user1Doc.data() || {};
-    const user2Data = user2Doc.data() || {};
-
-    // 1. إضافة الصديق الجديد في مجموعة أصدقائي
-    const myFriendRef = db.collection('users').doc(userId1).collection('friends').doc(userId2);
-    batch.set(myFriendRef, {
-      uid: userId2,
-      displayName: user2Data.displayName || user2Data.name || 'مستخدم',
-      photoURL: user2Data.photoURL || '',
-      addedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      status: 'friends' // حالة الصداقة
-    });
-
-    // 2. إضافة اسمي في مجموعة أصدقاء الصديق الآخر
-    const theirFriendRef = db.collection('users').doc(userId2).collection('friends').doc(userId1);
-    batch.set(theirFriendRef, {
-      uid: userId1,
-      displayName: user1Data.displayName || user1Data.name || 'مستخدم',
-      photoURL: user1Data.photoURL || '',
-      addedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      status: 'friends'
-    });
-
-    await batch.commit();
-    console.log('تم تسجيل الصداقة في سجلات الطرفين بنجاح');
-    return true;
-  } catch (error) {
-    console.error('حدث خطأ أثناء إضافة الصداقة:', error);
-    return false;
-  }
-}
-
-
-// 4. تعريف handleImageError
-window.handleImageError = function(img, userName) {
-  console.log('خطأ في تحميل الصورة:', userName);
-  
-  // إنشاء صورة رمزية بديلة
-  const colors = ['4a6cf7', '10b981', 'f59e0b', 'ef4444', '8b5cf6'];
-  const color = colors[Math.floor(Math.random() * colors.length)];
-  const initial = userName ? userName.charAt(0) : 'م';
-  
-  img.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="70" height="70" viewBox="0 0 70 70">
-    <rect width="70" height="70" fill="#${color}" rx="35"/>
-    <text x="35" y="42" text-anchor="middle" fill="white" font-family="Arial" font-size="28" font-weight="bold">${initial}</text>
-  </svg>`;
-  
-  img.alt = `صورة ${userName}`;
-  img.onerror = null; // منع تكرار الأخطاء
-};
-
-// 5. دالة formatRequestTime
-window.formatRequestTime = function(timestamp) {
-  if (!timestamp) return 'منذ فترة';
-  
-  try {
-    let date;
-    if (timestamp.toDate) {
-      date = timestamp.toDate();
-    } else {
-      date = new Date(timestamp);
-    }
-    
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    
-    if (diffMins < 1) return 'الآن';
-    if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
-    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
-    
-    return date.toLocaleDateString('ar-SA');
-  } catch (error) {
-    return 'منذ فترة';
-  }
-};
- 
-
- 
-// دالة لتنسيق وقت الطلب
-function formatRequestTime(timestamp) {
-  if (!timestamp) return 'منذ فترة';
-  
-  try {
-    // إذا كان timestamp هو كائن Firestore Timestamp
-    let date;
-    if (timestamp.toDate) {
-      date = timestamp.toDate();
-    } else if (timestamp instanceof Date) {
-      date = timestamp;
-    } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-      date = new Date(timestamp);
-    } else {
-      return 'منذ فترة';
-    }
-    
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    const diffWeeks = Math.floor(diffDays / 7);
-    
-    if (diffMs < 0) return 'قريباً';
-    if (diffMins < 1) return 'الآن';
-    if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
-    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
-    if (diffDays < 7) return `منذ ${diffDays} يوم`;
-    if (diffWeeks < 4) return `منذ ${diffWeeks} أسبوع`;
-    
-    // إذا كان أكثر من شهر، نعرض التاريخ
-    return date.toLocaleDateString('ar-SA', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  } catch (error) {
-    console.error('Error formatting time:', error);
-    return 'منذ فترة';
-  }
-}
-
-//==============================================
-async function loadSuggested(uid) {
-  try {
-    const box = document.getElementById('suggestedFriendsScroll');
-    if (!box) return;
-
-    box.innerHTML = '<div class="loading">جاري التحميل...</div>';
-
-    // --- 1. جلب الطلبات المرسلة مسبقاً لاستبعاد أصحابها ---
-    const sentRequests = await db.collection('friendRequests').where('from', '==', uid).get();
-    const sentIds = new Set();
-    sentRequests.forEach(doc => sentIds.add(doc.data().to));
-
-    // --- 2. جلب قائمة الأصدقاء الحاليين لاستبعادهم أيضاً ---
-    const friendsSnap = await db.collection('users').doc(uid).collection('friends').get();
-    const friendIds = new Set();
-    friendsSnap.forEach(doc => friendIds.add(doc.id));
-
-    // جلب المستخدمين
-    const snap = await db.collection('users').limit(20).get();
-    
-    if (snap.empty) {
-      box.innerHTML = '<div class="no-suggestions">لا توجد اقتراحات حالياً</div>';
-      return;
-    }
-    
-    let html = '';
-    let displayedCount = 0;
-
-    snap.forEach(doc => {
-      const userId = doc.id;
-      
-      // --- 3. دمج شروط الاستبعاد الذكية ---
-      if (userId === uid || sentIds.has(userId) || friendIds.has(userId)) return;
-      if (displayedCount >= 10) return; // الحفاظ على الحد المطلوب
-      displayedCount++;
-
-      const u = doc.data();
-      const name = u.name || 'مستخدم';
-      
-      // التزامنا بنظام SVG الموحد لمنع الارتجاف
-      const fallbackSVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
-        <svg xmlns="www.w3.org" width="70" height="70">
-          <rect width="100%" height="100%" rx="35" fill="#4a6cf7"/>
-          <text x="50%" y="55%" text-anchor="middle" fill="white" font-size="28" font-family="Arial" font-weight="bold">${name.charAt(0).toUpperCase()}</text>
-        </svg>
-      `)}`;
-
-      html += `
-        <div class="suggestion-item" id="suggest-item-${userId}" data-user-id="${userId}">
-          <div class="suggestion-avatar">
-            <img src="${u.profilePicture || fallbackSVG}" 
-                 alt="${name}" 
-                 onerror="this.onerror=null; this.src='${fallbackSVG}';">
-          </div>
-          <div class="suggestion-info">
-            <h4>${name}</h4>
-            ${u.job ? `<p class="job">${u.job}</p>` : ''}
-          </div>
-          <button class="btn-add" onclick="window.sendRequest('${userId}', this)">
-            <i class="fas fa-user-plus"></i>
-          </button>
-        </div>
-      `;
-    });
-    
-    box.innerHTML = html || '<div class="no-suggestions">لا توجد اقتراحات جديدة</div>';
-  } catch (error) {
-    console.error('❌ خطأ في loadSuggested:', error);
-  }
-}
-
-// --- 4. تحديث دالة الإرسال لتختفي البطاقة فوراً ---
-window.sendRequest = async function(targetUserId, btn) {
-    try {
-        const currentUser = firebase.auth().currentUser;
-        if (!currentUser) return;
-
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-        await db.collection('friendRequests').add({
-            from: currentUser.uid,
-            to: targetUserId,
-            status: 'pending',
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        // إخفاء العنصر بحركة انسيابية ثم حذفه تماماً
-        const card = document.getElementById(`suggest-item-${targetUserId}`);
-        if (card) {
-            card.style.transition = "0.3s ease";
-            card.style.opacity = "0";
-            card.style.transform = "scale(0.9)";
-            setTimeout(() => card.remove(), 300);
-        }
-    } catch (error) {
-        console.error("خطأ:", error);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-user-plus"></i>';
-    }
-};
-
- 
- 
-
-// ================= Suggested =================
-async function loadAllUsers() {
-
-    try {
-        console.log('🔄 جاري تحميل جميع المستخدمين...');
-        
-        const snapshot = await db.collection('users')
-            .orderBy('createdAt', 'desc')
-            .limit(200)
-            .get();
-        
-        allUsersCache = [];
-        snapshot.forEach(doc => {
-            if (!currentUser || doc.id !== currentUser.uid) {
-                allUsersCache.push({
-                    id: doc.id,
-                    ...doc.data()
-                });
-            }
-        });
-        
-        console.log(`✅ تم تحميل ${allUsersCache.length} مستخدم في الكاش`);
-        lastSuggestedUpdate = new Date();
-        
-    } catch (error) {
-        console.error('❌ خطأ في تحميل جميع المستخدمين:', error);
-    }
-}
- 
-// ==================== دالة إنشاء البطاقة ====================
-// 1. دالة معالجة الصورة - تضمن إرجاع الرابط فقط إذا كان صالحاً
-function resolveUserPhoto(userData) {
-  const photo = userData.photoURL || userData.avatar || userData.fromPhotoURL;
-  // فحص صارم: يجب أن يكون الرابط نصاً طويلاً ولا يحتوي على روابط وهمية مكسورة
-  if (photo && typeof photo === 'string' && photo.length > 10 && !photo.includes('i.ibb.co')) {
-    return photo;
-  }
-  return null; 
-}
-
-function createFriendCard(userData, id, type = 'friend') {
-  const name = userData.name || 'مستخدم';
-  const realPhoto = resolveUserPhoto(userData);
-  
-  const firstChar = name.charAt(0).toUpperCase();
-  const fallbackAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(`
-    <svg xmlns="www.w3.org" width="70" height="70">
-      <rect width="100%" height="100%" rx="35" fill="#4a6cf7"/>
-      <text x="50%" y="55%" text-anchor="middle" fill="white" font-size="28" font-family="Arial" font-weight="bold">${firstChar}</text>
-    </svg>
-  `)}`;
-
-  let actions = '';
-  if (type === 'friend') {
-    actions = `
-      <button class="icon-btn danger" onclick="removeFriend('${id}')">
-        <i class="fas fa-user-times"></i>
-      </button>`;
-  } else {
-    // ✅ هنا نستخدم id الذي استقبلته الدالة كمعامل
-    actions = `
-      <button class="btn-send" onclick="sendRequest('${id}', this)">
-        إضافة صديق
-      </button>`;
-  }
-
-  return `
-    <div class="friend-card" data-user-id="${id}">
-      <div class="friend-avatar">
-        <img src="${realPhoto || fallbackAvatar}" 
-             onerror="this.onerror=null; this.src='${fallbackAvatar}';">
-      </div>
-      <div class="friend-info">
-        <h4>${name}</h4>
-      </div>
-      <div class="friend-actions">${actions}</div>
-    </div>
-  `;
-}
-
-
-// 3. دالة إلغاء الصداقة المفقودة
-window.removeFriend = async function(friendId) {
-  if (!confirm('هل أنت متأكد من إزالة هذا الصديق؟')) return;
-
-  try {
-    const currentUser = firebase.auth().currentUser;
-    if (!currentUser) return;
-
-    const batch = db.batch();
-    const myRef = db.collection('users').doc(currentUser.uid).collection('friends').doc(friendId);
-    const theirRef = db.collection('users').doc(friendId).collection('friends').doc(currentUser.uid);
-
-    batch.delete(myRef);
-    batch.delete(theirRef);
-
-    await batch.commit();
-    
-    // إزالة العنصر من الواجهة
-    document.querySelector(`[data-user-id="${friendId}"]`)?.remove();
-    console.log("تم حذف الصديق بنجاح");
-  } catch (error) {
-    console.error("Error removing friend:", error);
-    alert("حدث خطأ أثناء الحذف");
-  }
-};
-async function loadFriends(uid) {
-  const box = document.getElementById('friendsList');
-  if (!box) return;
-
-  box.innerHTML = '<div class="loading">جاري تحميل قائمة الأصدقاء...</div>';
-
-  try {
-    const friendsSnap = await db.collection('users').doc(uid).collection('friends').get();
-
-    if (friendsSnap.empty) {
-      box.innerHTML = '<p class="empty-msg">لا يوجد أصدقاء حالياً</p>';
-      return;
-    }
-
-    let html = '';
-    // جلب بيانات كل صديق على حدة لضمان الحصول على أحدث صورة شخصية
-    const userPromises = friendsSnap.docs.map(d => db.collection('users').doc(d.id).get());
-    const usersSnapshots = await Promise.all(userPromises);
-
-    usersSnapshots.forEach(uSnap => {
-      if (uSnap.exists) {
-        html += createFriendCard(uSnap.data(), uSnap.id, 'friend');
-      }
-    });
-
-    box.innerHTML = html;
-  } catch (e) {
-    console.error("خطأ في تحميل الأصدقاء:", e);
-    box.innerHTML = '<p class="error-msg">حدث خطأ أثناء تحميل البيانات</p>';
-  }
-}
- // --- 1. دالة إرسال طلب الصداقة (إصلاح الخطأ الحالي) ---
-window.sendFriendRequest = function(friendId, button) {
-            button.innerHTML = '<i class="fas fa-check"></i> تم الإرسال';
-            button.classList.add('added');
-            button.disabled = true;
-            
-            setTimeout(() => {
-                const card = button.closest('.friend-scroll-card');
-                if (card) {
-                    card.style.opacity = '0.5';
-                    setTimeout(() => {
-                        card.remove();
-                        if (window.postManager) {
-                            window.postManager.updateScrollButtons();
-                        }
-                    }, 500);
-                }
-                
-                if (window.postManager) {
-                    window.postManager.showMessage('تم إرسال طلب الصداقة', 'success');
-                }
-            }, 1500);
-        };
- 
- 
-
-// --- 2. دالة معالجة الصورة (إصلاح الصورة المكسورة) ---
-function resolveUserPhoto(userData) {
-    const photo = userData.photoURL || userData.avatar || userData.fromPhotoURL;
-    // إذا كان الرابط مكسوراً أو i.ibb (الذي لا يظهر عندك) نرجع null
-    if (photo && photo.length > 10 && !photo.includes('i.ibb.co')) {
-        return photo;
-    }
-    return null;
-}
-
-// --- 3. دالة إنشاء الكارد (النسخة المستقرة لعام 2026) ---
-function createFriendCard(userData, userId, type = 'friend') {
-  const name = userData.name || 'مستخدم';
-  // استخدام profilePicture الذي أصلح مشكلة ظهور الصور لديك
-  const userImg = userData.profilePicture || userData.photoURL; 
-  
-  const fallbackSVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
-    <svg xmlns="www.w3.org" width="70" height="70">
-      <rect width="100%" height="100%" rx="35" fill="#4a6cf7"/>
-      <text x="50%" y="55%" text-anchor="middle" fill="white" font-size="28" font-family="Arial" font-weight="bold">${name.charAt(0).toUpperCase()}</text>
-    </svg>
-  `)}`;
-
-  // تحديد الأزرار بناءً على النوع (صديق حالي أم اقتراح)
-  let actionsHTML = '';
-  
-  if (type === 'friend') {
-    // عرض زر العين (المعاينة) وزر الحذف للأصدقاء الحاليين
-    actionsHTML = `
-      <button class="icon-btn" onclick="viewFriendProfile('${userId}')" title="عرض الملف">
-        <i class="fas fa-eye"></i>
-      </button>
-      <button class="icon-btn danger" onclick="window.removeFriend('${userId}')" title="إزالة الصديق">
-        <i class="fas fa-user-times"></i>
-      </button>
-    `;
-  } else {
-    // عرض زر الإضافة للمقترحين
-    actionsHTML = `
-      <button class="btn-add" onclick="window.sendRequest('${userId}', this)" title="إضافة صديق">
-        <i class="fas fa-user-plus"></i>
-      </button>
-    `;
-  }
-
-  return `
-    <div class="friend-card" data-user-id="${userId}" id="friend-card-${userId}">
-      <div class="friend-avatar">
-        <img src="${userImg || fallbackSVG}" 
-             alt="${name}" 
-             onerror="this.onerror=null; this.src='${fallbackSVG}';">
-      </div>
-      <div class="friend-info">
-        <h4>${name}</h4>
-        <p class="friend-job">${userData.job || ''}</p>
-      </div>
-      <div class="friend-actions">
-        ${actionsHTML}
-      </div>
-    </div>
-  `;
-}
-
-
-
-// --- 4. دالة حذف الصديق (إلغاء الصداقة) ---
-window.removeFriend = async function(friendId) {
-    if (!confirm('هل تريد حذف الصديق؟')) return;
-    try {
-        const uid = firebase.auth().currentUser.uid;
-        const batch = db.batch();
-        batch.delete(db.collection('users').doc(uid).collection('friends').doc(friendId));
-        batch.delete(db.collection('users').doc(friendId).collection('friends').doc(uid));
-        await batch.commit();
-        document.querySelector(`[data-user-id="${friendId}"]`)?.remove();
-    } catch (e) { console.error(e); }
-};
-
-//=========================
- // =============================================
-// نظام تحديث العداد الذكي - إصدار 2026 المصحح
-// =============================================
-// توحيد اسم الدالة ليتطابق مع الاستدعاء في السطر 10266
-window.updateFriendsCount = async function(targetUid = null) {
-    try {
-        const currentUser = firebase.auth().currentUser;
-        const uid = targetUid || (currentUser ? currentUser.uid : null);
-        
-        if (!uid) return;
-
-        const snapshot = await firebase.firestore()
-            .collection('users')
-            .doc(uid)
-            .collection('friends')
-            .get();
-
-        const count = snapshot.size;
-
-        // --- التعديل هنا لضمان تحديث كل العناصر الممكنة ---
-        if (targetUid) {
-            // تحديث صفحة الصديق إذا كان هناك ID ممرر
-            const friendEl = document.getElementById('friendProfileFriends');
-            if (friendEl) friendEl.innerText = `${count} أصدقاء`;
-        } else {
-            // تحديث صفحتك الشخصية وأي مكان آخر يظهر فيه عدد أصدقائك
-            const mainEl = document.getElementById('mainProfileFriends');
-            const sideEl = document.getElementById('sidebarFriendsCount'); // مثال إضافي
-            
-            if (mainEl) mainEl.innerText = `${count} أصدقاء`;
-            if (sideEl) sideEl.innerText = `${count}`;
-        }
-        
-        console.log(`✅ تم تحديث العداد لـ ${uid}: ${count}`);
-
-    } catch (error) {
-        console.error('❌ خطأ:', error.message);
-    }
-};
-
-
-
-
- 
-// =============================================
-// نظام صفحة الصديق - إصدار نهائي مصحح
-// =============================================
-
-let currentFriendId = null;
-let currentFriendData = null;
-
-// =============================================
-// 1. دوال المساعدة المفقودة
-// =============================================
-
-// دالة للحصول على عدد الأصدقاء
-window.getFriendsCount = async function(userId) {
-    try {
-
-        // استعلام عن الصداقات التي يقبلها المستخدم
-        const friends1Snapshot = await db.collection('friendships')
-            .where('user1', '==', userId)
-            .where('status', '==', 'accepted')
-            .get();
-        
-        const friends2Snapshot = await db.collection('friendships')
-            .where('user2', '==', userId)
-            .where('status', '==', 'accepted')
-            .get();
-        
-        return friends1Snapshot.size + friends2Snapshot.size;
-    } catch (error) {
-        console.error('Error getting friends count:', error);
-        return 0;
-    }
-};
-
-// دالة لعرض خطأ في صفحة الصديق
-window.showFriendError = function(message) {
-    console.error('Friend profile error:', message);
-    
-    // عرض رسالة خطأ بسيطة
-    const profileName = document.getElementById('friendProfileName');
-    if (profileName) {
-        profileName.innerHTML = `<span style="color: #ff4444;">${message}</span>`;
-    }
-    
-    // إخفاء زر التحميل في الصورة الشخصية
-    const profileAvatar = document.getElementById('friendProfileAvatar');
-    if (profileAvatar) {
-        profileAvatar.innerHTML = '<i class="fas fa-user-slash" style="color: #ff4444;"></i>';
-    }
-};
 
 // دالة لإضافة زر تكبير الصورة الشخصية
 window.addProfileImageZoom = function() {
@@ -12697,6 +11712,382 @@ document.addEventListener('click', function(e) {
 document.addEventListener('visibilitychange', function() {
     if (document.hidden) stopAllActiveVideos(null);
 });
+
+// =============================================
+// نظام الأصدقاء وطلبات الصداقة - نسخة موحدة ونظيفة
+// =============================================
+
+let requestsLoaded = false;
+let allFriendsCache = [];
+
+// 1. التنقل بين تبويبات الأصدقاء (الكل، الطلبات، المقترحون، المتصلون)
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+        btn.classList.add('active');
+        const tabId = btn.dataset.tab;
+        const tab = document.getElementById(tabId);
+        if (tab) tab.classList.add('active');
+
+        if (tabId === 'requests-friends-tab' && !requestsLoaded && auth.currentUser) {
+            requestsLoaded = true;
+            window.loadRequests(auth.currentUser.uid);
+        }
+    });
+});
+
+// 2. تحميل البيانات عند تسجيل الدخول
+firebase.auth().onAuthStateChanged(function(user) {
+    if (user) {
+        requestsLoaded = false;
+        window.loadFriends(user.uid);
+        window.loadSuggested(user.uid);
+        window.updateFriendsCount();
+    }
+});
+
+// 3. توليد صورة SVG افتراضية بالحرف الأول
+function generateAvatarSVG(name, size = 70) {
+    const char = (name || 'م').charAt(0).toUpperCase();
+    return `data:image/svg+xml;utf8,${encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+            <rect width="100%" height="100%" rx="${size / 2}" fill="#4a6cf7"/>
+            <text x="50%" y="55%" text-anchor="middle" fill="white" font-size="${Math.round(size * 0.4)}" font-family="Arial" font-weight="bold">${char}</text>
+        </svg>
+    `)}`;
+}
+
+// 4. تحميل قائمة الأصدقاء الحاليين
+window.loadFriends = async function(uid) {
+    const listContainer = document.getElementById('friendsList');
+    if (!listContainer || !uid) return;
+
+    listContainer.innerHTML = '<div class="loading">جاري تحميل الأصدقاء...</div>';
+
+    try {
+        const friendsSnap = await db.collection('users').doc(uid).collection('friends').get();
+        allFriendsCache = [];
+
+        if (friendsSnap.empty) {
+            listContainer.innerHTML = '<div class="initial-message">لا يوجد أصدقاء حالياً. تصفح قسم "مقترحين" لإضافة أصدقاء!</div>';
+            window.updateFriendsCount();
+            return;
+        }
+
+        const friendPromises = friendsSnap.docs.map(doc => db.collection('users').doc(doc.id).get());
+        const friendDocs = await Promise.all(friendPromises);
+
+        let html = '';
+        friendDocs.forEach(userDoc => {
+            if (userDoc.exists) {
+                const data = userDoc.data();
+                allFriendsCache.push({ id: userDoc.id, ...data });
+                html += createFriendCard(data, userDoc.id, 'friend');
+            }
+        });
+
+        listContainer.innerHTML = html || '<div class="initial-message">لا يوجد أصدقاء حالياً</div>';
+        window.updateFriendsCount();
+    } catch (error) {
+        console.error('❌ خطأ في تحميل الأصدقاء:', error);
+        listContainer.innerHTML = '<div class="error-state">حدث خطأ أثناء تحميل قائمة الأصدقاء</div>';
+    }
+};
+
+// 5. البحث الفوري في قائمة الأصدقاء
+window.searchFriends = function(query) {
+    const listContainer = document.getElementById('friendsList');
+    if (!listContainer) return;
+
+    const term = (query || '').trim().toLowerCase();
+    if (!term) {
+        listContainer.innerHTML = allFriendsCache.length
+            ? allFriendsCache.map(f => createFriendCard(f, f.id, 'friend')).join('')
+            : '<div class="initial-message">لا يوجد أصدقاء حالياً</div>';
+        return;
+    }
+
+    const filtered = allFriendsCache.filter(f =>
+        (f.name && f.name.toLowerCase().includes(term)) ||
+        (f.job && f.job.toLowerCase().includes(term))
+    );
+
+    listContainer.innerHTML = filtered.length
+        ? filtered.map(f => createFriendCard(f, f.id, 'friend')).join('')
+        : '<div class="initial-message">لا توجد نتائج مطابقة للبحث</div>';
+};
+
+// 6. إنشاء بطاقة صديق موحدة
+function createFriendCard(userData, userId, type = 'friend') {
+    const name = userData.name || 'مستخدم';
+    const userImg = userData.profilePicture || userData.photoURL;
+    const fallbackSVG = generateAvatarSVG(name, 70);
+
+    const actionsHTML = type === 'friend'
+        ? `
+            <button class="icon-btn" onclick="viewFriendProfile('${userId}')" title="عرض الملف">
+                <i class="fas fa-eye"></i>
+            </button>
+            <button class="icon-btn danger" onclick="window.removeFriend('${userId}')" title="إزالة الصديق">
+                <i class="fas fa-user-times"></i>
+            </button>
+          `
+        : `
+            <button class="btn-add" onclick="window.sendRequest('${userId}', this)" title="إضافة صديق">
+                <i class="fas fa-user-plus"></i>
+            </button>
+          `;
+
+    return `
+        <div class="friend-card" data-user-id="${userId}" id="friend-card-${userId}">
+            <div class="friend-avatar">
+                <img src="${userImg || fallbackSVG}" 
+                     alt="${name}" 
+                     onerror="this.onerror=null; this.src='${fallbackSVG}';">
+            </div>
+            <div class="friend-info">
+                <h4>${name}</h4>
+                <p class="friend-job">${userData.job || ''}</p>
+            </div>
+            <div class="friend-actions">
+                ${actionsHTML}
+            </div>
+        </div>
+    `;
+}
+
+// 7. تحميل الأصدقاء المقترحين
+window.loadSuggested = async function(uid) {
+    const box = document.getElementById('suggestedFriendsScroll');
+    if (!box || !uid) return;
+
+    box.innerHTML = '<div class="loading">جاري التحميل...</div>';
+
+    try {
+        const [sentRequests, friendsSnap, usersSnap] = await Promise.all([
+            db.collection('friendRequests').where('from', '==', uid).get(),
+            db.collection('users').doc(uid).collection('friends').get(),
+            db.collection('users').limit(25).get()
+        ]);
+
+        const sentIds = new Set(sentRequests.docs.map(doc => doc.data().to));
+        const friendIds = new Set(friendsSnap.docs.map(doc => doc.id));
+
+        let html = '';
+        let displayedCount = 0;
+
+        usersSnap.forEach(doc => {
+            const userId = doc.id;
+            if (userId === uid || sentIds.has(userId) || friendIds.has(userId) || displayedCount >= 10) return;
+
+            displayedCount++;
+            const u = doc.data();
+            const name = u.name || 'مستخدم';
+            const fallbackSVG = generateAvatarSVG(name, 70);
+
+            html += `
+                <div class="suggestion-item" id="suggest-item-${userId}" data-user-id="${userId}">
+                    <div class="suggestion-avatar">
+                        <img src="${u.profilePicture || fallbackSVG}" 
+                             alt="${name}" 
+                             onerror="this.onerror=null; this.src='${fallbackSVG}';">
+                    </div>
+                    <div class="suggestion-info">
+                        <h4>${name}</h4>
+                        ${u.job ? `<p class="job">${u.job}</p>` : ''}
+                    </div>
+                    <button class="btn-add" onclick="window.sendRequest('${userId}', this)">
+                        <i class="fas fa-user-plus"></i>
+                    </button>
+                </div>
+            `;
+        });
+
+        box.innerHTML = html || '<div class="no-suggestions">لا توجد اقتراحات جديدة حالياً</div>';
+    } catch (error) {
+        console.error('❌ خطأ في تحميل المقترحين:', error);
+    }
+};
+
+// 8. إرسال طلب صداقة
+window.sendRequest = async function(targetUserId, btn) {
+    try {
+        const currentUser = firebase.auth().currentUser;
+        if (!currentUser) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        await db.collection('friendRequests').add({
+            from: currentUser.uid,
+            to: targetUserId,
+            status: 'pending',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        const card = document.getElementById(`suggest-item-${targetUserId}`);
+        if (card) {
+            card.style.transition = '0.3s ease';
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.9)';
+            setTimeout(() => card.remove(), 300);
+        }
+    } catch (error) {
+        console.error('❌ خطأ في إرسال الطلب:', error);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-user-plus"></i>';
+    }
+};
+
+// 9. تحميل وعرض طلبات الصداقة الواردة
+window.loadRequests = function(uid) {
+    const container = document.getElementById('friendRequests');
+    if (!container || !uid) return;
+
+    container.innerHTML = '<div class="loading">جاري تحميل الطلبات...</div>';
+
+    db.collection('friendRequests')
+        .where('to', '==', uid)
+        .where('status', '==', 'pending')
+        .onSnapshot(async (snapshot) => {
+            const reqBadge = document.getElementById('requestsCount');
+            if (reqBadge) reqBadge.textContent = snapshot.size > 0 ? snapshot.size : '';
+
+            if (snapshot.empty) {
+                container.innerHTML = '<div class="no-requests">لا توجد طلبات صداقة معلقة</div>';
+                return;
+            }
+
+            let html = '';
+            for (const doc of snapshot.docs) {
+                html += await createSafeRequestCard(doc.id, doc.data());
+            }
+            container.innerHTML = html;
+        }, (error) => {
+            console.error('❌ خطأ في جلب الطلبات:', error);
+            container.innerHTML = '<div class="error-state">خطأ في الاتصال</div>';
+        });
+};
+
+async function createSafeRequestCard(requestId, requestData) {
+    const senderSnap = await db.collection('users').doc(requestData.from).get();
+    const senderData = senderSnap.exists ? senderSnap.data() : {};
+
+    const userName = senderData.name || 'مستخدم';
+    const userPhoto = senderData.profilePicture || senderData.photoURL;
+    const fallbackSVG = generateAvatarSVG(userName, 50);
+
+    return `
+        <div class="friend-request-card" id="request-${requestId}">
+            <div class="request-content">
+                <div class="user-avatar">
+                    <img src="${userPhoto || fallbackSVG}" 
+                         class="avatar-image" 
+                         onerror="this.onerror=null; this.src='${fallbackSVG}';">
+                </div>
+                <div class="user-details">
+                    <h4 class="user-name">${userName}</h4>
+                </div>
+            </div>
+            <div class="request-actions">
+                <button class="action-btn accept-btn" onclick="handleAcceptRequest('${requestId}', '${requestData.from}', this)">
+                    قبول
+                </button>
+                <button class="action-btn reject-btn" onclick="handleRejectRequest('${requestId}', this)">
+                    رفض
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// 10. قبول ورفض الطلبات وحذف الأصدقاء
+window.handleAcceptRequest = async function(requestId, fromUserId, button) {
+    const originalText = button.innerHTML;
+    try {
+        button.disabled = true;
+        button.innerHTML = 'جاري...';
+
+        const currentUser = firebase.auth().currentUser;
+        if (!currentUser) throw new Error('يجب تسجيل الدخول');
+
+        const batch = db.batch();
+        batch.update(db.collection('friendRequests').doc(requestId), { status: 'accepted' });
+
+        const myFriendRef = db.collection('users').doc(currentUser.uid).collection('friends').doc(fromUserId);
+        const theirFriendRef = db.collection('users').doc(fromUserId).collection('friends').doc(currentUser.uid);
+
+        batch.set(myFriendRef, { friendId: fromUserId, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+        batch.set(theirFriendRef, { friendId: currentUser.uid, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+
+        await batch.commit();
+
+        document.getElementById(`request-${requestId}`)?.remove();
+        window.loadFriends(currentUser.uid);
+    } catch (error) {
+        console.error('❌ خطأ في قبول الطلب:', error);
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+};
+
+window.handleRejectRequest = async function(requestId, button) {
+    try {
+        button.disabled = true;
+        await db.collection('friendRequests').doc(requestId).update({
+            status: 'rejected',
+            respondedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        document.getElementById(`request-${requestId}`)?.remove();
+    } catch (error) {
+        console.error('❌ خطأ في رفض الطلب:', error);
+        button.disabled = false;
+    }
+};
+
+window.removeFriend = async function(friendId) {
+    if (!confirm('هل أنت متأكد من إلغاء الصداقة؟')) return;
+    try {
+        const uid = firebase.auth().currentUser.uid;
+        const batch = db.batch();
+        batch.delete(db.collection('users').doc(uid).collection('friends').doc(friendId));
+        batch.delete(db.collection('users').doc(friendId).collection('friends').doc(uid));
+        await batch.commit();
+
+        document.querySelector(`[data-user-id="${friendId}"]`)?.remove();
+        allFriendsCache = allFriendsCache.filter(f => f.id !== friendId);
+        window.updateFriendsCount();
+    } catch (error) {
+        console.error('❌ خطأ في حذف الصديق:', error);
+    }
+};
+
+// 11. تحديث عداد الأصدقاء
+window.updateFriendsCount = async function(targetUid = null) {
+    try {
+        const currentUser = firebase.auth().currentUser;
+        const uid = targetUid || (currentUser ? currentUser.uid : null);
+        if (!uid) return;
+
+        const snapshot = await db.collection('users').doc(uid).collection('friends').get();
+        const count = snapshot.size;
+
+        if (targetUid) {
+            const friendEl = document.getElementById('friendProfileFriends');
+            if (friendEl) friendEl.innerText = `${count} أصدقاء`;
+        } else {
+            const mainEl = document.getElementById('mainProfileFriends');
+            const tabBadge = document.getElementById('friendsCount');
+            if (mainEl) mainEl.innerText = `${count} أصدقاء`;
+            if (tabBadge) tabBadge.innerText = count > 0 ? count : '';
+        }
+    } catch (error) {
+        console.error('❌ خطأ في تحديث العداد:', error.message);
+    }
+};
+
  </script>
  
 
