@@ -5650,27 +5650,7 @@ iframe {
             this.userData = userData;
             return userData;
         }
-        stopAllMedia() {
-    // 1. إيقاف جميع فيديوهات HTML5 المباشرة
-    document.querySelectorAll('video').forEach(video => {
-        video.pause();
-        video.currentTime = 0;
-        video.src = ""; // تفريغ المصدر لإيقاف التحميل في الخلفية
-    });
-
-    // 2. إيقاف جميع فيديوهات يوتيوب (iframes)
-    document.querySelectorAll('iframe').forEach(iframe => {
-        iframe.src = ""; // تفريغ الرابط يوقف الصوت والفيديو فوراً
-    });
-
-    // 3. مسح حاويات المنشورات والفيديوهات لتنظيف الذاكرة
-    const containers = ['postsFeed', 'publicPostsFeed', 'videosGrid', 'friendPostsContainer'];
-    containers.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = '';
-    });
-}
-
+      
         async checkAuthState() {
             auth.onAuthStateChanged(async (user) => {
                 if (user) {
@@ -6121,6 +6101,26 @@ clearAllIntervals() {
     }
 }
 
+stopAllMedia() {
+    // إيقاف جميع فيديوهات HTML5
+    document.querySelectorAll('video').forEach(video => {
+        video.pause();
+        video.currentTime = 0;
+        video.removeAttribute('src');
+        video.load();
+    });
+
+    // إيقاف جميع فيديوهات يوتيوب (iframes)
+    document.querySelectorAll('iframe').forEach(iframe => {
+        iframe.src = 'about:blank';
+    });
+
+    // مسح محتوى المنشورات والفيديوهات من الصفحة
+    ['postsFeed', 'publicPostsFeed', 'videosGrid', 'friendPostsContainer'].forEach(id => {
+        const container = document.getElementById(id);
+        if (container) container.innerHTML = '';
+    });
+}
 
         openAuthModal(tab = 'login') {
             document.getElementById('authModal').classList.add('active');
@@ -12676,13 +12676,37 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
- document.addEventListener('play', function(e) {
+// 1. إيقاف أي فيديو HTML5 آخر عند تشغيل فيديو جديد
+document.addEventListener('play', function(e) {
     if (e.target.tagName === 'VIDEO') {
         document.querySelectorAll('video').forEach(video => {
             if (video !== e.target) video.pause();
         });
+        // إيقاف فيديوهات يوتيوب أيضاً عند تشغيل فيديو مباشر
+        document.querySelectorAll('iframe[src*="youtube.com"]').forEach(iframe => {
+            const src = iframe.src;
+            iframe.src = src; // إعادة تحميل الإطار لإيقاف التشغيل
+        });
     }
 }, true);
+
+// 2. إيقاف الفيديوهات عند النقر على أي iframe (فيديو يوتيوب آخر)
+window.addEventListener('blur', function() {
+    setTimeout(() => {
+        if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+            const activeIframe = document.activeElement;
+            // إيقاف جميع فيديوهات HTML5
+            document.querySelectorAll('video').forEach(v => v.pause());
+            // إيقاف بقية إطارات يوتيوب
+            document.querySelectorAll('iframe[src*="youtube.com"]').forEach(iframe => {
+                if (iframe !== activeIframe) {
+                    const src = iframe.src;
+                    iframe.src = src;
+                }
+            });
+        }
+    }, 100);
+});
 
  
  </script>
