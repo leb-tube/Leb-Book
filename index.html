@@ -6767,7 +6767,9 @@ createVideoEmbed(videoData) {
    if (videoData.type === 'youtube') {
     return `
         <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
-             style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://ytimg.com{videoData.id}/hqdefault.jpg'), url('https://ytimg.com{videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+             style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a;
+                    background-image: url('https://i.ytimg.com/vi/${videoData.id}/hqdefault.jpg'), url('https://i.ytimg.com/vi/${videoData.id}/mqdefault.jpg');
+                    background-size: cover; background-position: center; cursor: pointer;">
             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
                 <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
             </div>
@@ -6778,7 +6780,7 @@ createVideoEmbed(videoData) {
             </a>
         </p>
     `;
-}
+   }
  else if (videoData.type === 'direct') {
         return `
             <div style="margin: 15px 0;">
@@ -12678,21 +12680,27 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 // 1. إيقاف جميع الفيديوهات النشطة (يوتيوب + MP4)
 function stopAllActiveVideos(exceptVideo) {
-    // إيقاف فيديوهات MP4 المباشرة
+    // إيقاف فيديوهات MP4 (بدون لمس الفيديو المستثنى)
     var videos = document.querySelectorAll('video');
     for (var i = 0; i < videos.length; i++) {
-        if (videos[i] !== exceptVideo) {
+        if (videos[i] !== exceptVideo && !videos[i].paused) {
             videos[i].pause();
         }
     }
 
-    // إيقاف مشغلات يوتيوب وإعادة زر التشغيل الأحمر فوق الخلفية
+    // تدمير iframes يوتيوب النشطة (لا يمكن إيقافها إلا بإزالة iframe)
     var activeBoxes = document.querySelectorAll('.yt-box[data-active="1"]');
     for (var j = 0; j < activeBoxes.length; j++) {
         var box = activeBoxes[j];
+        if (exceptVideo && box.contains(exceptVideo)) continue;
+
+        var vid = box.getAttribute('data-id');
         box.removeAttribute('data-active');
-        box.innerHTML = '<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:64px; height:44px; background:#ff0000; border-radius:12px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,0.4);">' +
-                        '<i class="fas fa-play" style="color:white; font-size:20px; margin-left:3px;"></i></div>';
+        box.innerHTML =
+            '<img src="https://i.ytimg.com/vi/' + vid + '/hqdefault.jpg" ' +
+            'style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.85;">' +
+            '<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:64px; height:44px; background:#ff0000; border-radius:12px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(0,0,0,0.4);">' +
+            '<i class="fas fa-play" style="color:white; font-size:20px; margin-left:3px;"></i></div>';
     }
 }
 
@@ -12709,7 +12717,8 @@ function startYouTubeVideo(boxElement) {
     boxElement.innerHTML = '';
 
     var iframe = document.createElement('iframe');
-    iframe.src = 'https://youtube.com' + encodeURIComponent(videoId) + '?autoplay=1';
+    // ✅ الرابط الصحيح
+    iframe.src = 'https://www.youtube.com/embed/' + videoId + '?autoplay=1&rel=0';
     iframe.style.position = 'absolute';
     iframe.style.top = '0';
     iframe.style.left = '0';
@@ -12721,27 +12730,29 @@ function startYouTubeVideo(boxElement) {
 
     boxElement.appendChild(iframe);
 }
-// 3. إيقاف الفيديو عند تشغيل فيديو MP4 آخر
+// عند مغادرة الصفحة
+window.addEventListener('beforeunload', function() {
+    stopAllActiveVideos(null);
+});
+
+// إيقاف MP4 عند تشغيل آخر
 document.addEventListener('play', function(e) {
     if (e.target && e.target.tagName === 'VIDEO') {
         stopAllActiveVideos(e.target);
     }
 }, true);
 
-// 4. إيقاف الفيديو تلقائياً عند الانتقال إلى أي صفحة أو تبويب آخر في الموقع
+// عند التنقل داخل الموقع
 document.addEventListener('click', function(e) {
     if (e.target.closest('.nav-item, .tab-btn, .friend-tab, [data-page], [data-tab]')) {
         stopAllActiveVideos(null);
     }
 }, true);
 
-// 5. إيقاف الفيديو عند تصغير المتصفح أو الانتقال لتبويب خارجي
+// عند تصغير المتصفح / تبديل التبويب
 document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-        stopAllActiveVideos(null);
-    }
+    if (document.hidden) stopAllActiveVideos(null);
 });
-
  </script>
  
 
