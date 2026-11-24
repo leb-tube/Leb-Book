@@ -9152,6 +9152,24 @@ createVideoEmbedForPublic(videoData) {
     }
 }
 
+ formatDate(date) {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'الآن';
+        if (diffMins < 60) return `قبل ${diffMins} دقيقة`;
+        if (diffHours < 24) return `قبل ${diffHours} ساعة`;
+        if (diffDays < 7) return `قبل ${diffDays} يوم`;
+        
+        return date.toLocaleDateString('ar-LB', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    }
 
     addLoadMoreButton(container) {
         const existingBtn = document.querySelector('.load-more-btn');
