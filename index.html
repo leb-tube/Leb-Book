@@ -9978,9 +9978,9 @@ function formatUnifiedPostText(text) {
     let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     safe = safe.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1877f2;">$1</a>');
     safe = safe.replace(/#([؀-ۿ\w]+)/g, '<span style="color:#1877f2; font-weight:600;">#$1</span>');
-    return safe.replace(/
-/g, '<br>');
+    return safe.replace(/\r?\n/g, '<br>');
 }
+
 
 function formatUnifiedDate(date) {
     const diffMins = Math.floor((new Date() - date) / 60000);
