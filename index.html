@@ -10381,7 +10381,10 @@ window.viewFriendProfile = async function(friendId) {
         }
 
         initFriendProfileSystem();
+        
+        // ✅ تحديث معرّف الصديق محلياً وعلى النطاق العام
         currentFriendId = friendId;
+        window.currentFriendId = friendId;
 
         let overlay = document.getElementById('friendProfileOverlay');
         if (!overlay) {
@@ -10389,12 +10392,17 @@ window.viewFriendProfile = async function(friendId) {
             document.body.appendChild(overlay);
         }
 
+        // تفريغ المحتوى السابق فوراً عند فتح ملف صديق جديد
+        const postsContainer = document.getElementById('friendPostsContainer');
+        if (postsContainer) postsContainer.innerHTML = '';
+
         overlay.style.display = 'block';
         overlay.scrollTop = 0;
         document.body.style.overflow = 'hidden';
 
+        // تفعيل تبويب المنشورات وبدء التحميل مرة واحدة فقط
         window.switchFriendTab('posts');
-        loadFriendPosts(friendId);
+
         const [userDoc, status] = await Promise.all([
             db.collection('users').doc(friendId).get(),
             checkFriendshipStatus(currentUser.uid, friendId)
@@ -10415,15 +10423,12 @@ window.viewFriendProfile = async function(friendId) {
         if (typeof window.updateFriendsCount === 'function') {
             window.updateFriendsCount(friendId);
         }
-        loadFriendPosts(friendId);
-        loadFriendAbout(currentFriendData);
-        loadFriendFriendsList(friendId);
-        loadFriendPhotosList(friendId);
 
     } catch (error) {
         console.error('❌ خطأ في فتح ملف الصديق:', error);
     }
 };
+
 
 // 3. إغلاق ملف الصديق واستعادة حالة الواجهة الرئيسية نظيفة
 window.closeFriendProfile = function() {
@@ -10577,44 +10582,84 @@ window.handleUnfriendFromProfile = async function(friendId) {
 };
 
 // 7. التبديل بين تبويبات ملف الصديق
-window.switchFriendTab = function(tabName) {
-    // 1. تحديث حالة الأزرار النشطة
-    document.querySelectorAll('.fp-tab-item').forEach(btn => {
-        if (btn.getAttribute('data-ftab') === tabName) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
+// ربط الدالة على window لتكون متاحة في كل مكان
+window.loadFriendPosts = async function(friendId) {
+    const container = document.getElementById('friendPostsContainer');
+    if (!container || !friendId) return;
+
+    container.innerHTML = '<div class="loading" style="text-align:center; padding:30px; color:#65676b;"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنشورات...</div>';
+
+    try {
+        let snapshot = await db.collection('posts').where('userId', '==', friendId).get();
+        if (snapshot.empty) {
+            snapshot = await db.collection('posts').where('authorId', '==', friendId).get();
         }
-    });
 
-    // 2. إخفاء جميع اللوحات وإظهار اللوحة المطلوبة فقط
-    document.querySelectorAll('.fp-tab-panel').forEach(panel => {
-        panel.classList.remove('active');
-        panel.style.display = 'none';
-    });
+        if (snapshot.empty) {
+            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات لهذا المستخدم</div>';
+            return;
+        }
 
-    const targetPanel = document.getElementById(`friendTab-${tabName}`);
-    if (targetPanel) {
-        targetPanel.classList.add('active');
-        targetPanel.style.display = 'block';
-    }
-
-    // 3. تحميل بيانات التبويب عند الحاجة إذا كانت فارغة
-    if (currentFriendId) {
-        if (tabName === 'posts') {
-            const postsContainer = document.getElementById('friendPostsContainer');
-            if (postsContainer && (!postsContainer.innerHTML.trim() || postsContainer.innerHTML.includes('جاري تحميل'))) {
-                loadFriendPosts(currentFriendId);
+        let posts = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const privacy = data.privacy || 'public';
+            if (privacy === 'public' || privacy === 'friends') {
+                posts.push({ id: doc.id, ...data });
             }
-        } else if (tabName === 'about' && currentFriendData) {
-            loadFriendAbout(currentFriendData);
-        } else if (tabName === 'friends') {
-            loadFriendFriendsList(currentFriendId);
-        } else if (tabName === 'photos') {
-            loadFriendPhotosList(currentFriendId);
+        });
+
+        if (posts.length === 0) {
+            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات عامة لعرضها</div>';
+            return;
         }
+
+        posts.sort((a, b) => {
+            const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
+            const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
+            return timeB - timeA;
+        });
+
+        container.innerHTML = posts.map(post => createFriendPostHTML(post)).join('');
+    } catch (error) {
+        console.error('❌ خطأ في تحميل منشورات الصديق:', error);
+        container.innerHTML = `<div style="text-align:center; padding:30px; color:#e41e3f;">حدث خطأ أثناء تحميل المنشورات: ${error.message}</div>`;
     }
 };
+
+// التبديل بين تبويبات صفحة الصديق
+window.switchFriendTab = function(tabName) {
+    // 1. تفعيل الزر المختار
+    document.querySelectorAll('.fp-tab-item').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-ftab') === tabName);
+    });
+
+    // 2. إظهار اللوحة المختارة فقط
+    document.querySelectorAll('.fp-tab-panel').forEach(panel => {
+        const isTarget = panel.id === `friendTab-${tabName}`;
+        panel.classList.toggle('active', isTarget);
+        panel.style.display = isTarget ? 'block' : 'none';
+    });
+
+    // 3. تحميل بيانات التبويب عند الحاجة
+    const fid = window.currentFriendId || currentFriendId;
+    if (!fid) return;
+
+    if (tabName === 'posts') {
+        const container = document.getElementById('friendPostsContainer');
+        const isEmptyOrLoading = !container.innerHTML.trim() || container.querySelector('.loading');
+        if (isEmptyOrLoading) {
+            window.loadFriendPosts(fid);
+        }
+    } else if (tabName === 'about' && currentFriendData) {
+        loadFriendAbout(currentFriendData);
+    } else if (tabName === 'friends') {
+        loadFriendFriendsList(fid);
+    } else if (tabName === 'photos') {
+        loadFriendPhotosList(fid);
+    }
+};
+
 
 // 8. تحميل منشورات الصديق مع مشغل الفيديو الموحد
 async function loadFriendPosts(friendId) {
