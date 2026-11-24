@@ -10578,84 +10578,71 @@ window.handleUnfriendFromProfile = async function(friendId) {
 
 // 7. التبديل بين تبويبات ملف الصديق
 window.switchFriendTab = function(tabName) {
-    if (typeof stopAllActiveVideos === 'function') {
-        stopAllActiveVideos(null);
-    }
-
+    // 1. تحديث حالة الأزرار النشطة
     document.querySelectorAll('.fp-tab-item').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.ftab === tabName);
+        if (btn.getAttribute('data-ftab') === tabName) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
     });
 
+    // 2. إخفاء جميع اللوحات وإظهار اللوحة المطلوبة فقط
     document.querySelectorAll('.fp-tab-panel').forEach(panel => {
         panel.classList.remove('active');
+        panel.style.display = 'none';
     });
 
     const targetPanel = document.getElementById(`friendTab-${tabName}`);
-    if (targetPanel) targetPanel.classList.add('active');
+    if (targetPanel) {
+        targetPanel.classList.add('active');
+        targetPanel.style.display = 'block';
+    }
+
+    // 3. تحميل بيانات التبويب عند الحاجة إذا كانت فارغة
+    if (currentFriendId) {
+        if (tabName === 'posts') {
+            const postsContainer = document.getElementById('friendPostsContainer');
+            if (postsContainer && (!postsContainer.innerHTML.trim() || postsContainer.innerHTML.includes('جاري تحميل'))) {
+                loadFriendPosts(currentFriendId);
+            }
+        } else if (tabName === 'about' && currentFriendData) {
+            loadFriendAbout(currentFriendData);
+        } else if (tabName === 'friends') {
+            loadFriendFriendsList(currentFriendId);
+        } else if (tabName === 'photos') {
+            loadFriendPhotosList(currentFriendId);
+        }
+    }
 };
 
 // 8. تحميل منشورات الصديق مع مشغل الفيديو الموحد
-async function loadFriendPosts(friendId) {
-    const container = document.getElementById('friendPostsContainer');
-    if (!container) return;
+async function loadFriendPhotosList(friendId) {
+    const grid = document.getElementById('friendPhotosGrid');
+    if (!grid) return;
 
-    container.innerHTML = '<div class="loading" style="text-align:center; padding:30px; color:#65676b;"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنشورات...</div>';
-
+    grid.innerHTML = '<div style="text-align:center; padding:20px; color:#65676b;">جاري تحميل الصور...</div>';
     try {
-        console.log('🔍 جاري جلب منشورات المستخدم:', friendId);
-
-        // 1. جلب المنشورات باستخدام userId أولاً (بدون orderBy لتجنب خطأ الفهرس)
-        let snapshot = await db.collection('posts')
-            .where('userId', '==', friendId)
-            .get();
-
-        // 2. خطة بديلة: إذا كانت فارغة، نجرب البحث بحقل authorId أو uid
-        if (snapshot.empty) {
-            snapshot = await db.collection('posts')
-                .where('authorId', '==', friendId)
-                .get();
-        }
-
-        console.log('📦 عدد المستندات التي عادت من Firestore:', snapshot.size);
-
-        if (snapshot.empty) {
-            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات لهذا المستخدم</div>';
-            return;
-        }
-
-        let posts = [];
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            const privacy = data.privacy || 'public';
-            if (privacy === 'public' || privacy === 'friends') {
-                posts.push({ id: doc.id, ...data });
+        const snap = await db.collection('posts').where('userId', '==', friendId).get();
+        let photosHTML = '';
+        snap.forEach(doc => {
+            const p = doc.data();
+            if (p.imageUrl && (p.privacy === 'public' || p.privacy === 'friends' || !p.privacy)) {
+                photosHTML += `
+                    <div style="border-radius: 8px; overflow: hidden; aspect-ratio: 1/1; background: #eee;">
+                        <img src="${p.imageUrl}" onclick="window.open('${p.imageUrl}', '_blank')" 
+                             style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;">
+                    </div>
+                `;
             }
         });
-
-        if (posts.length === 0) {
-            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات عامة لعرضها</div>';
-            return;
-        }
-
-        // ترتيب المنشورات من الأحدث إلى الأقدم برمجياً
-        posts.sort((a, b) => {
-            const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
-            const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
-            return timeB - timeA;
-        });
-
-        container.innerHTML = posts.map(post => createFriendPostHTML(post)).join('');
-
-    } catch (error) {
-        console.error('❌ خطأ في تحميل منشورات الصديق:', error);
-        container.innerHTML = `
-            <div class="error-state" style="text-align:center; padding:30px; color:#e41e3f;">
-                <p>حدث خطأ أثناء تحميل المنشورات</p>
-                <small>${error.message}</small>
-            </div>
-        `;
+        grid.innerHTML = photosHTML || '<div style="text-align:center; padding:30px; color:#65676b; grid-column: 1/-1;">لا توجد صور منشورة</div>';
+    } catch (e) {
+        console.error('❌ خطأ في تحميل صور الصديق:', e);
+        grid.innerHTML = '<div style="text-align:center; padding:20px; color:#e41e3f;">تعذر تحميل الصور</div>';
     }
 }
+
 // دالة بناء بطاقة منشور الصديق (تدعم النصوص، الصور، والفيديوهات الموحدة)
 function createFriendPostHTML(post) {
     const authorName = post.authorName || post.userName || (currentFriendData && currentFriendData.name) || 'مستخدم';
@@ -10748,51 +10735,19 @@ function loadFriendAbout(data) {
     if (!container) return;
 
     container.innerHTML = `
-        <div class="fp-about-card">
-            <h3 style="margin-top:0; margin-bottom:15px;">معلومات شخصية</h3>
-            <p><i class="fas fa-user" style="width:24px; color:#1877f2;"></i> <strong>الاسم:</strong> ${data.name || 'غير محدد'}</p>
-            <p><i class="fas fa-briefcase" style="width:24px; color:#1877f2;"></i> <strong>العمل:</strong> ${data.job || 'غير محدد'}</p>
-            <p><i class="fas fa-graduation-cap" style="width:24px; color:#1877f2;"></i> <strong>الدراسة:</strong> ${data.education || 'غير محدد'}</p>
-            <p><i class="fas fa-map-marker-alt" style="width:24px; color:#1877f2;"></i> <strong>السكن:</strong> ${data.location || 'غير محدد'}</p>
-            <p><i class="fas fa-heart" style="width:24px; color:#1877f2;"></i> <strong>الحالة الاجتماعية:</strong> ${data.relationship || 'غير محدد'}</p>
-            ${data.bio ? `<p><i class="fas fa-info-circle" style="width:24px; color:#1877f2;"></i> <strong>نبذة:</strong> ${data.bio}</p>` : ''}
+        <div style="background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e4e6eb;">
+            <h3 style="margin-top: 0; margin-bottom: 16px; color: #050505; font-size: 18px;">معلومات عن ${data.name || 'المستخدم'}</h3>
+            <div style="display: flex; flex-direction: column; gap: 12px; color: #1c1e21; font-size: 15px;">
+                <div><i class="fas fa-briefcase" style="width: 24px; color: #65676b;"></i> <strong>العمل:</strong> ${data.job || 'غير محدد'}</div>
+                <div><i class="fas fa-map-marker-alt" style="width: 24px; color: #65676b;"></i> <strong>المكان:</strong> ${data.location || data.city || 'غير محدد'}</div>
+                <div><i class="fas fa-info-circle" style="width: 24px; color: #65676b;"></i> <strong>نبذة:</strong> ${data.bio || 'لا توجد نبذة شخصية'}</div>
+            </div>
         </div>
     `;
 }
 
 // 10. تحميل أصدقاء الصديق
 async function loadFriendFriendsList(friendId) {
-    const grid = document.getElementById('friendFriendsGrid');
-    if (!grid) return;
-
-    try {
-        const snap = await db.collection('users').doc(friendId).collection('friends').limit(30).get();
-        if (snap.empty) {
-            grid.innerHTML = '<p style="color:#65676b;">لا يوجد أصدقاء لعرضهم</p>';
-            return;
-        }
-
-        const docs = await Promise.all(snap.docs.map(d => db.collection('users').doc(d.id).get()));
-        let html = '';
-
-        docs.forEach(doc => {
-            if (!doc.exists || doc.id === friendId) return;
-            const u = doc.data();
-            const fallback = typeof generateAvatarSVG === 'function' ? generateAvatarSVG(u.name, 75) : '';
-            html += `
-                <div class="fp-mini-card" onclick="window.viewFriendProfile('${doc.id}')">
-                    <img src="${u.profilePicture || u.photoURL || fallback}" onerror="this.onerror=null; this.src='${fallback}';">
-                    <h4 style="margin:0; font-size:15px;">${u.name || 'مستخدم'}</h4>
-                    <p style="margin:4px 0 0; font-size:12px; color:#65676b;">${u.job || ''}</p>
-                </div>
-            `;
-        });
-
-        grid.innerHTML = html || '<p style="color:#65676b;">لا يوجد أصدقاء لعرضهم</p>';
-    } catch (e) {
-        grid.innerHTML = '';
-    }
-}
 
 // 11. تحميل صور الصديق
 async function loadFriendPhotosList(friendId) {
