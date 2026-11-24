@@ -12677,76 +12677,94 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
-// 1. إيقاف أي فيديو HTML5 آخر عند تشغيل فيديو جديد
-document.addEventListener('play', function(e) {
-    if (e.target.tagName === 'VIDEO') {
-        document.querySelectorAll('video').forEach(video => {
-            if (video !== e.target) video.pause();
-        });
-        // إيقاف فيديوهات يوتيوب أيضاً عند تشغيل فيديو مباشر
-        document.querySelectorAll('iframe[src*="youtube.com"]').forEach(iframe => {
-            const src = iframe.src;
-            iframe.src = src; // إعادة تحميل الإطار لإيقاف التشغيل
-        });
-    }
-}, true);
+// --- نظام التحكم المضمون بالفيديوهات (YouTube API + HTML5) ---
 
-// 2. إيقاف الفيديوهات عند النقر على أي iframe (فيديو يوتيوب آخر)
-window.addEventListener('blur', function() {
-    setTimeout(() => {
-        if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
-            const activeIframe = document.activeElement;
-            // إيقاف جميع فيديوهات HTML5
-            document.querySelectorAll('video').forEach(v => v.pause());
-            // إيقاف بقية إطارات يوتيوب
-            document.querySelectorAll('iframe[src*="youtube.com"]').forEach(iframe => {
-                if (iframe !== activeIframe) {
-                    const src = iframe.src;
-                    iframe.src = src;
+let ytPlayers = []; // مصفوفة لتخزين كل مشغلات يوتيوب في الصفحة
+let isYouTubeAPIReady = false;
+
+// 1. تحميل مكتبة YouTube IFrame API الرسمية
+if (!window.YT) {
+    const tag = document.createElement('script');
+    tag.src = "https://youtube.com";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+}
+
+// 2. تُستدعى تلقائياً عند جاهزية مكتبة يوتيوب
+window.onYouTubeIframeAPIReady = function() {
+    isYouTubeAPIReady = true;
+    initAllYouTubePlayers();
+};
+
+// 3. ربط جميع إطارات يوتيوب الموجودة أو المضافة حديثاً
+function initAllYouTubePlayers() {
+    if (!isYouTubeAPIReady) return;
+
+    document.querySelectorAll('iframe[src*="://youtube.com"]').forEach((iframe, index) => {
+        // تجنب ربط نفس الإطار مرتين
+        if (iframe.dataset.ytBound === "true") return;
+
+        // التأكد من وجود enablejsapi=1 في الرابط
+        if (!iframe.src.includes('enablejsapi=1')) {
+            const sep = iframe.src.includes('?') ? '&' : '?';
+            iframe.src += `${sep}enablejsapi=1`;
+        }
+
+        // إعطاء ID فريد للإطار إذا لم يكن يملك واحداً
+        if (!iframe.id) {
+            iframe.id = 'yt-player-' + Date.now() + '-' + index;
+        }
+
+        iframe.dataset.ytBound = "true";
+
+        // إنشاء كائن مشغل يوتيوب رسمي لمراقبة حالة التشغيل
+        const player = new YT.Player(iframe.id, {
+            events: {
+                'onStateChange': function(event) {
+                    // الرقم 1 يعني YT.PlayerState.PLAYING (الفيديو بدأ يعمل الآن)
+                    if (event.data === 1) {
+                        pauseAllOthers(player, null);
+                    }
                 }
-            });
-        }
-    }, 100);
-});
-// إيقاف جميع فيديوهات يوتيوب ما عدا النشط
-function pauseAllYouTubeExcept(activeIframe = null) {
-    document.querySelectorAll('iframe[src*="youtube.com/embed"]').forEach(iframe => {
-        if (iframe !== activeIframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage(
-                JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }),
-                '*'
-            );
-        }
+            }
+        });
+
+        ytPlayers.push(player);
     });
 }
 
-// إيقاف جميع فيديوهات HTML5 ما عدا النشط
-function pauseAllHTML5Except(activeVideo = null) {
+// 4. دالة إيقاف كل الفيديوهات ما عدا الفيديو الذي يعمل حالياً
+function pauseAllOthers(activeYTPlayer, activeHTML5Video) {
+    // إيقاف جميع فيديوهات يوتيوب الأخرى
+    ytPlayers.forEach(player => {
+        if (player !== activeYTPlayer && typeof player.pauseVideo === 'function') {
+            try {
+                player.pauseVideo();
+            } catch (e) {}
+        }
+    });
+
+    // إيقاف جميع فيديوهات HTML5 الأخرى
     document.querySelectorAll('video').forEach(video => {
-        if (video !== activeVideo && !video.paused) {
+        if (video !== activeHTML5Video && !video.paused) {
             video.pause();
         }
     });
 }
 
-// 1. عند تشغيل فيديو MP4/WebM مباشر
-document.addEventListener('play', (e) => {
+// 5. مراقبة تشغيل فيديوهات HTML5 المباشرة
+document.addEventListener('play', function(e) {
     if (e.target.tagName === 'VIDEO') {
-        pauseAllHTML5Except(e.target);
-        pauseAllYouTubeExcept(null);
+        pauseAllOthers(null, e.target);
     }
 }, true);
 
-// 2. عند النقر لتشغيل فيديو YouTube
-window.addEventListener('blur', () => {
-    setTimeout(() => {
-        const active = document.activeElement;
-        if (active && active.tagName === 'IFRAME') {
-            pauseAllHTML5Except(null);
-            pauseAllYouTubeExcept(active);
-        }
-    }, 100);
+// 6. مراقبة الصفحة لربط أي منشورات جديدة يتم تحميلها من Firebase تلقائياً
+const videoDomObserver = new MutationObserver(() => {
+    initAllYouTubePlayers();
 });
+videoDomObserver.observe(document.body, { childList: true, subtree: true });
+
 
  </script>
  
