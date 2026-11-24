@@ -10394,7 +10394,7 @@ window.viewFriendProfile = async function(friendId) {
         document.body.style.overflow = 'hidden';
 
         window.switchFriendTab('posts');
-
+        loadFriendPosts(friendId);
         const [userDoc, status] = await Promise.all([
             db.collection('users').doc(friendId).get(),
             checkFriendshipStatus(currentUser.uid, friendId)
