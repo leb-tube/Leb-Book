@@ -12707,6 +12707,59 @@ window.addEventListener('blur', function() {
         }
     }, 100);
 });
+// --- نظام منع تشغيل أكثر من فيديو في نفس الوقت (HTML5 + YouTube) ---
+
+// 1. دالة لإيقاف جميع فيديوهات يوتيوب ما عدا الفيديو النشط
+function pauseOtherYouTubeVideos(activeIframe = null) {
+    document.querySelectorAll('iframe').forEach(iframe => {
+        if (iframe !== activeIframe && iframe.src.includes('://youtube.com')) {
+            // إرسال أمر الإيقاف الرسمي ليوتيوب
+            iframe.contentWindow.postMessage(
+                JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }),
+                '*'
+            );
+        }
+    });
+}
+
+// 2. دالة لإيقاف جميع فيديوهات HTML5 ما عدا الفيديو النشط
+function pauseOtherHTML5Videos(activeVideo = null) {
+    document.querySelectorAll('video').forEach(video => {
+        if (video !== activeVideo && !video.paused) {
+            video.pause();
+        }
+    });
+}
+
+// 3. عند تشغيل أي فيديو HTML5 مباشر
+document.addEventListener('play', function(e) {
+    if (e.target.tagName === 'VIDEO') {
+        pauseOtherHTML5Videos(e.target);
+        pauseOtherYouTubeVideos(null); // إيقاف كل فيديوهات يوتيوب
+    }
+}, true);
+
+// 4. عند النقر على أي فيديو يوتيوب (iframe) لتشغيله
+window.addEventListener('blur', function() {
+    setTimeout(() => {
+        const activeEl = document.activeElement;
+        if (activeEl && activeEl.tagName === 'IFRAME') {
+            pauseOtherHTML5Videos(null); // إيقاف كل فيديوهات HTML5
+            pauseOtherYouTubeVideos(activeEl); // إيقاف بقية فيديوهات يوتيوب
+        }
+    }, 100);
+});
+
+// 5. ضمان وجود enablejsapi=1 في جميع روابط يوتيوب التي تضاف للصفحة ديناميكياً
+const ytObserver = new MutationObserver(() => {
+    document.querySelectorAll('iframe[src*="://youtube.com"]').forEach(iframe => {
+        if (!iframe.src.includes('enablejsapi=1')) {
+            const separator = iframe.src.includes('?') ? '&' : '?';
+            iframe.src += `${separator}enablejsapi=1`;
+        }
+    });
+});
+ytObserver.observe(document.body, { childList: true, subtree: true });
 
  
  </script>
