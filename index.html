@@ -5650,6 +5650,26 @@ iframe {
             this.userData = userData;
             return userData;
         }
+        stopAllMedia() {
+    // 1. إيقاف جميع فيديوهات HTML5 المباشرة
+    document.querySelectorAll('video').forEach(video => {
+        video.pause();
+        video.currentTime = 0;
+        video.src = ""; // تفريغ المصدر لإيقاف التحميل في الخلفية
+    });
+
+    // 2. إيقاف جميع فيديوهات يوتيوب (iframes)
+    document.querySelectorAll('iframe').forEach(iframe => {
+        iframe.src = ""; // تفريغ الرابط يوقف الصوت والفيديو فوراً
+    });
+
+    // 3. مسح حاويات المنشورات والفيديوهات لتنظيف الذاكرة
+    const containers = ['postsFeed', 'publicPostsFeed', 'videosGrid', 'friendPostsContainer'];
+    containers.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '';
+    });
+}
 
         async checkAuthState() {
             auth.onAuthStateChanged(async (user) => {
@@ -6083,7 +6103,7 @@ clearAllIntervals() {
                     const dataKey = `lebBook_data_${sessionInfo.userId}_${sessionInfo.sessionId}`;
                     localStorage.removeItem(dataKey);
                 }
-                 
+                 stopAllMedia();
                 sessionStorage.clear();
                  
                 this.currentUser = null;
@@ -12652,7 +12672,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
- 
+ document.addEventListener('play', function(e) {
+    if (e.target.tagName === 'VIDEO') {
+        document.querySelectorAll('video').forEach(video => {
+            if (video !== e.target) video.pause();
+        });
+    }
+}, true);
+
  
  </script>
  
