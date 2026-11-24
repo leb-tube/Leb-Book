@@ -9892,13 +9892,16 @@ window.loadSuggested = async function(uid) {
 
     try {
         const [sentRequests, friendsSnap, usersSnap] = await Promise.all([
-            db.collection('friendRequests').where('from', '==', uid).get(),
+            // ✅ استبعاد الطلبات المعلقة فقط (pending) وليس القديمة أو المرفوضة
+            db.collection('friendRequests').where('from', '==', uid).where('status', '==', 'pending').get(),
             db.collection('users').doc(uid).collection('friends').get(),
             db.collection('users').limit(25).get()
         ]);
 
         const sentIds = new Set(sentRequests.docs.map(doc => doc.data().to));
         const friendIds = new Set(friendsSnap.docs.map(doc => doc.id));
+
+        console.log('👥 إجمالي المستخدمين في قاعدة البيانات:', usersSnap.size);
 
         let html = '';
         let displayedCount = 0;
@@ -10366,25 +10369,19 @@ function initFriendProfileSystem() {
 window.viewFriendProfile = async function(friendId) {
     try {
         const currentUser = firebase.auth().currentUser;
-        if (!currentUser) {
-            alert('يرجى تسجيل الدخول أولاً');
-            return;
-        }
+        if (!currentUser) return;
 
         if (friendId === currentUser.uid) {
             if (window.pageManager) window.pageManager.showPage('posts');
             return;
         }
 
-        if (typeof stopAllActiveVideos === 'function') {
-            stopAllActiveVideos(null);
-        }
+        if (typeof stopAllActiveVideos === 'function') stopAllActiveVideos(null);
 
         initFriendProfileSystem();
-        
-        // ✅ تحديث معرّف الصديق محلياً وعلى النطاق العام
         currentFriendId = friendId;
         window.currentFriendId = friendId;
+        currentFriendData = null;
 
         let overlay = document.getElementById('friendProfileOverlay');
         if (!overlay) {
@@ -10392,22 +10389,21 @@ window.viewFriendProfile = async function(friendId) {
             document.body.appendChild(overlay);
         }
 
-        // تفريغ المحتوى السابق فوراً عند فتح ملف صديق جديد
-        const postsContainer = document.getElementById('friendPostsContainer');
-        if (postsContainer) postsContainer.innerHTML = '';
+        // إعادة تعيين علامات التحميل السابقة لتبويبات الصديق الجديد
+        ['friendPostsContainer', 'friendAboutContainer', 'friendFriendsContainer', 'friendPhotosContainer'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.innerHTML = '';
+                delete el.dataset.loadedFor;
+            }
+        });
 
         overlay.style.display = 'block';
         overlay.scrollTop = 0;
         document.body.style.overflow = 'hidden';
 
-        // تفعيل تبويب المنشورات وبدء التحميل مرة واحدة فقط
-        window.switchFriendTab('posts');
-
-        const [userDoc, status] = await Promise.all([
-            db.collection('users').doc(friendId).get(),
-            checkFriendshipStatus(currentUser.uid, friendId)
-        ]);
-
+        // 1. جلب بيانات الصديق الأساسية أولاً وبشكل مستقل لضمان ظهور الاسم والصورة فوراً
+        const userDoc = await db.collection('users').doc(friendId).get();
         if (!userDoc.exists) {
             alert('المستخدم غير موجود');
             window.closeFriendProfile();
@@ -10415,21 +10411,27 @@ window.viewFriendProfile = async function(friendId) {
         }
 
         currentFriendData = userDoc.data();
-        friendshipStatus = status;
-
         renderFriendProfileHeader(currentFriendData, friendId);
-        renderFriendActionButton();
+        loadFriendAbout(currentFriendData); // تجهيز تبويب "حول" فوراً
 
+        // 2. تشغيل تبويب المنشورات وتحديث عداد أصدقاء الصديق
+        window.switchFriendTab('posts');
         if (typeof window.updateFriendsCount === 'function') {
             window.updateFriendsCount(friendId);
+        }
+
+        // 3. فحص حالة الصداقة بشكل منفصل حتى لا يعطل عرض المعلومات إذا تأخر
+        try {
+            friendshipStatus = await checkFriendshipStatus(currentUser.uid, friendId);
+            renderFriendActionButton();
+        } catch (statusErr) {
+            console.warn('تنبيه في فحص حالة الصداقة:', statusErr);
         }
 
     } catch (error) {
         console.error('❌ خطأ في فتح ملف الصديق:', error);
     }
 };
-
-
 // 3. إغلاق ملف الصديق واستعادة حالة الواجهة الرئيسية نظيفة
 window.closeFriendProfile = function() {
     if (typeof stopAllActiveVideos === 'function') {
