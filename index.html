@@ -12049,22 +12049,80 @@ window.handleRejectRequest = async function(requestId, button) {
     }
 };
 
+// 10-ج. حذف الصديق بشكل مضمون وتحديث العداد فوراً
 window.removeFriend = async function(friendId) {
     if (!confirm('هل أنت متأكد من إلغاء الصداقة؟')) return;
     try {
         const uid = firebase.auth().currentUser.uid;
-        const batch = db.batch();
-        batch.delete(db.collection('users').doc(uid).collection('friends').doc(friendId));
-        batch.delete(db.collection('users').doc(friendId).collection('friends').doc(uid));
-        await batch.commit();
 
-        document.querySelector(`[data-user-id="${friendId}"]`)?.remove();
+        // 1. الحذف من قائمة أصدقائك أنت أولاً (مضمون الصلاحيات)
+        await db.collection('users').doc(uid).collection('friends').doc(friendId).delete();
+
+        // 2. محاولة الحذف من قائمة الطرف الآخر دون إيقاف الكود في حال منعته قواعد الأمان
+        try {
+            await db.collection('users').doc(friendId).collection('friends').doc(uid).delete();
+        } catch (subErr) {
+            console.warn('تنبيه: لم يتم الحذف من قائمة الطرف الآخر بسبب الصلاحيات:', subErr.message);
+        }
+
+        // 3. إزالة البطاقة من الواجهة وتحديث الذاكرة المؤقتة
+        const card = document.getElementById(`friend-card-${friendId}`) || document.querySelector(`[data-user-id="${friendId}"]`);
+        if (card) card.remove();
+
         allFriendsCache = allFriendsCache.filter(f => f.id !== friendId);
-        window.updateFriendsCount();
+
+        // إذا أصبحت القائمة فارغة، أظهر رسالة عدم وجود أصدقاء
+        const listContainer = document.getElementById('friendsList');
+        if (listContainer && allFriendsCache.length === 0) {
+            listContainer.innerHTML = '<div class="initial-message">لا يوجد أصدقاء حالياً</div>';
+        }
+
+        // 4. تحديث العداد فوراً من قاعدة البيانات وتحديث قائمة المقترحين
+        await window.updateFriendsCount();
+        window.loadSuggested(uid);
+
     } catch (error) {
         console.error('❌ خطأ في حذف الصديق:', error);
+        alert('تعذر حذف الصديق: ' + error.message);
     }
 };
+
+// 11. تحديث عداد الأصدقاء في جميع الأماكن بدقة
+window.updateFriendsCount = async function(targetUid = null) {
+    try {
+        const currentUser = firebase.auth().currentUser;
+        const uid = targetUid || (currentUser ? currentUser.uid : null);
+        if (!uid) return;
+
+        // جلب العدد الفعلي من مجموعة friends الفرعية
+        const snapshot = await db.collection('users').doc(uid).collection('friends').get();
+        const count = snapshot.size;
+
+        if (targetUid) {
+            const friendEl = document.getElementById('friendProfileFriends');
+            if (friendEl) friendEl.innerText = `${count} أصدقاء`;
+        } else {
+            // تحديث العداد في الملف الشخصي الرئيسي
+            const mainEl = document.getElementById('mainProfileFriends');
+            if (mainEl) mainEl.innerText = `${count} أصدقاء`;
+
+            // تحديث العداد في تبويب الأصدقاء
+            const tabBadge = document.getElementById('friendsCount');
+            if (tabBadge) tabBadge.innerText = count > 0 ? count : '0';
+
+            // تحديث أي عنصر آخر يحمل نفس الكلاس أو المعرف
+            document.querySelectorAll('.friends-count, #profileFriendsCount').forEach(el => {
+                el.innerText = count;
+            });
+
+            // تحديث حقل العدد في مستند المستخدم الرئيسي في Firestore ليبقى متزامناً
+            db.collection('users').doc(uid).update({ friendsCount: count }).catch(() => {});
+        }
+    } catch (error) {
+        console.error('❌ خطأ في تحديث العداد:', error.message);
+    }
+};
+
 
 // 11. تحديث عداد الأصدقاء
 // 11. تحديث عداد الأصدقاء مع استبعاد حساب المستخدم نفسه
