@@ -7679,88 +7679,90 @@ async deletePhoto(photoIndex, photoType = null) {
             });
         }
 
-        showPage(page) {
-            document.querySelectorAll('.page-content').forEach(content => {
-                content.classList.remove('active');
-                content.style.display = 'none';
-            });
-            
-            const postsFeed = document.getElementById('postsFeed');
-            const suggestedFriends = document.getElementById('suggestedFriendsContainer');
-            const createPost = document.querySelector('.create-post');
-            
-            if (postsFeed) postsFeed.style.display = 'none';
-            if (suggestedFriends) suggestedFriends.style.display = 'none';
-            if (createPost) createPost.style.display = 'none';
+       showPage(page) {
+    document.querySelectorAll('.page-content').forEach(content => {
+        content.classList.remove('active');
+        content.style.display = 'none';
+    });
+    
+    const postsFeed = document.getElementById('postsFeed');
+    const suggestedFriends = document.getElementById('suggestedFriendsContainer');
+    const createPost = document.querySelector('.create-post');
+    const friendsSection = document.querySelector('.friends-section');
+    
+    if (postsFeed) postsFeed.style.display = 'none';
+    if (suggestedFriends) suggestedFriends.style.display = 'none';
+    if (createPost) createPost.style.display = 'none';
+    if (friendsSection) {
+        friendsSection.style.display = 'none';
+        friendsSection.classList.remove('active');
+    }
 
-            switch(page) {
-                case 'posts':
-                    if (postsFeed) {
-                        postsFeed.style.display = 'block';
-                        postsFeed.classList.add('active');
-                    }
-                    if (suggestedFriends) suggestedFriends.style.display = 'block';
-                    if (createPost) createPost.style.display = 'block';
-                    if (window.postManager) window.postManager.loadPosts();
-                    break;
-
-               case 'public': 
-                const publicPage = document.getElementById('publicPage');
-                if (publicPage) {
-                    publicPage.style.display = 'block';
-                    publicPage.classList.add('active');
-                    this.publicPostsManager.loadPublicPosts(true);
-                    
-                    // تحديث بيانات المستخدم في صندوق الإنشاء
-                    const userData = window.authSystem.getUserData();
-                    if (userData) {
-                        document.getElementById('publicPostUserName').textContent = userData.name || 'مستخدم';
-                        document.getElementById('publicPostProfilePic').src = userData.profilePicture || 'https://i.pravatar.cc/48';
-                    }
-                }
-                break;
-                    
-                case 'about':
-                    const aboutPage = document.getElementById('aboutPage');
-                    if (aboutPage) {
-                        aboutPage.style.display = 'block';
-                        aboutPage.classList.add('active');
-                        this.loadAboutInfo();
-                    }
-                    break;
-                 const friendsSection = document.querySelector('.friends-section');
-                    if (friendsSection) {
-                       friendsSection.style.display = 'none';
-                       friendsSection.classList.remove('active');
-                     }
-                case 'friends':
-                     if (friendsSection) {
-                     friendsSection.style.display = 'block';
-                     friendsSection.classList.add('active');
-                     }
-                 break;
-                    
-                case 'photos':
-                    const photosPage = document.getElementById('photosPage');
-                    if (photosPage) {
-                        photosPage.style.display = 'block';
-                        photosPage.classList.add('active');
-                        this.loadPhotosPage();
-                    }
-                    break;
-                    
-                case 'videos':
-                    const videosPage = document.getElementById('videosPage');
-                    if (videosPage) {
-                        videosPage.style.display = 'block';
-                        videosPage.classList.add('active');
-                        this.loadVideosPage();
-                    }
-                    break;
+    switch(page) {
+        case 'posts':
+            if (postsFeed) {
+                postsFeed.style.display = 'block';
+                postsFeed.classList.add('active');
             }
+            if (suggestedFriends) suggestedFriends.style.display = 'block';
+            if (createPost) createPost.style.display = 'block';
+            if (window.postManager) window.postManager.loadPosts();
+            break;
+
+        case 'public': 
+            const publicPage = document.getElementById('publicPage');
+            if (publicPage) {
+                publicPage.style.display = 'block';
+                publicPage.classList.add('active');
+                this.publicPostsManager.loadPublicPosts(true);
+                
+                // تحديث بيانات المستخدم في صندوق الإنشاء
+                const userData = window.authSystem.getUserData();
+                if (userData) {
+                    document.getElementById('publicPostUserName').textContent = userData.name || 'مستخدم';
+                    document.getElementById('publicPostProfilePic').src = userData.profilePicture || 'https://i.pravatar.cc/48';
+                }
+            }
+            break;
             
-            this.currentPage = page;
-        }
+        case 'about':
+            const aboutPage = document.getElementById('aboutPage');
+            if (aboutPage) {
+                aboutPage.style.display = 'block';
+                aboutPage.classList.add('active');
+                this.loadAboutInfo();
+            }
+            break;
+
+        case 'friends':
+            if (friendsSection) {
+                friendsSection.style.display = 'block';
+                friendsSection.classList.add('active');
+            }
+            break;
+            
+        case 'photos':
+            const photosPage = document.getElementById('photosPage');
+            if (photosPage) {
+                photosPage.style.display = 'block';
+                photosPage.classList.add('active');
+                this.loadPhotosPage();
+            }
+            break;
+            
+        case 'videos':
+            const videosPage = document.getElementById('videosPage');
+            if (videosPage) {
+                videosPage.style.display = 'block';
+                videosPage.classList.add('active');
+                this.loadVideosPage();
+            }
+            break;
+    }
+    
+    this.currentPage = page;
+}
+
 
         async loadAboutInfo() {
             try {
