@@ -10602,33 +10602,42 @@ async function loadFriendPosts(friendId) {
     container.innerHTML = '<div class="loading" style="text-align:center; padding:30px; color:#65676b;"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنشورات...</div>';
 
     try {
-        // جلب منشورات الصديق بدون orderBy لتجنب تعليق الاستعلام بسبب نقص الفهرس المركب في Firestore
-        const snapshot = await db.collection('posts')
+        console.log('🔍 جاري جلب منشورات المستخدم:', friendId);
+
+        // 1. جلب المنشورات باستخدام userId أولاً (بدون orderBy لتجنب خطأ الفهرس)
+        let snapshot = await db.collection('posts')
             .where('userId', '==', friendId)
             .get();
 
+        // 2. خطة بديلة: إذا كانت فارغة، نجرب البحث بحقل authorId أو uid
         if (snapshot.empty) {
-            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات لعرضها</div>';
+            snapshot = await db.collection('posts')
+                .where('authorId', '==', friendId)
+                .get();
+        }
+
+        console.log('📦 عدد المستندات التي عادت من Firestore:', snapshot.size);
+
+        if (snapshot.empty) {
+            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات لهذا المستخدم</div>';
             return;
         }
 
-        // تحويل المستندات إلى مصفوفة وتصفيتها حسب الخصوصية
         let posts = [];
         snapshot.forEach(doc => {
             const data = doc.data();
             const privacy = data.privacy || 'public';
-            // عرض المنشورات العامة للجميع، ومنشورات الأصدقاء إذا كنتما صديقين
-            if (privacy === 'public' || (privacy === 'friends' && friendshipStatus === 'friends')) {
+            if (privacy === 'public' || privacy === 'friends') {
                 posts.push({ id: doc.id, ...data });
             }
         });
 
         if (posts.length === 0) {
-            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات عامة لهذا المستخدم</div>';
+            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات عامة لعرضها</div>';
             return;
         }
 
-        // ترتيب المنشورات من الأحدث إلى الأقدم في المتصفح
+        // ترتيب المنشورات من الأحدث إلى الأقدم برمجياً
         posts.sort((a, b) => {
             const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
             const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
@@ -10641,13 +10650,12 @@ async function loadFriendPosts(friendId) {
         console.error('❌ خطأ في تحميل منشورات الصديق:', error);
         container.innerHTML = `
             <div class="error-state" style="text-align:center; padding:30px; color:#e41e3f;">
-                <p>تعذر تحميل المنشورات</p>
+                <p>حدث خطأ أثناء تحميل المنشورات</p>
                 <small>${error.message}</small>
             </div>
         `;
     }
 }
-
 
 function formatUnifiedPostText(text) {
     if (!text) return '';
