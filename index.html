@@ -9460,1984 +9460,609 @@ window.addEventListener('scroll', () => {
         menu.classList.remove('active');
     });
 });
-// ================= Tabs =================
- 
-  
-
-// دالة لإضافة زر تكبير الصورة الشخصية
-window.addProfileImageZoom = function() {
-    const profileAvatar = document.getElementById('friendProfileAvatar');
-    if (!profileAvatar) return;
-    
-    const img = profileAvatar.querySelector('img');
-    if (!img || !img.src) return;
-    
-    // إزالة أي زر تكبير موجود مسبقاً
-    const existingBtn = profileAvatar.querySelector('.profile-zoom-btn');
-    if (existingBtn) existingBtn.remove();
-    
-    // إنشاء زر تكبير جديد
-    const zoomBtn = document.createElement('button');
-    zoomBtn.className = 'profile-zoom-btn';
-    zoomBtn.innerHTML = '<i class="fas fa-search-plus"></i>';
-    zoomBtn.style.cssText = `
-        position: absolute;
-        bottom: 10px;
-        right: 10px;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: rgba(0,0,0,0.6);
-        color: white;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transition: opacity 0.3s;
-        z-index: 3;
-    `;
-    
-    zoomBtn.onclick = function(e) {
-        e.stopPropagation();
-        viewFullImage('profile', img.src);
-    };
-    
-    profileAvatar.appendChild(zoomBtn);
-    
-    // إظهار الزر عند التحويم
-    profileAvatar.addEventListener('mouseenter', () => zoomBtn.style.opacity = '1');
-    profileAvatar.addEventListener('mouseleave', () => zoomBtn.style.opacity = '0');
-};
-
-// دالة لعرض الصورة كاملة
-window.viewFullImage = function(type, imageUrl) {
-    if (!imageUrl) return;
-    
-    // إغلاق أي نافذة مفتوحة حالياً
-    const existingModal = document.querySelector('.full-image-modal');
-    if (existingModal) existingModal.remove();
-    
-    const modal = document.createElement('div');
-    modal.className = 'full-image-modal';
-    modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.9);
-        z-index: 10001;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    `;
-    
-    modal.innerHTML = `
-        <div style="position: relative; max-width: 90%; max-height: 90%;">
-            <button onclick="this.parentElement.parentElement.remove()" 
-                    style="position: absolute; top: -50px; right: 0; background: none; border: none; color: white; font-size: 30px; cursor: pointer;">
-                <i class="fas fa-times"></i>
-            </button>
-            <img src="${imageUrl}" 
-                 alt="صورة كاملة"
-                 style="max-width: 100%; max-height: 80vh; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // إغلاق عند الضغط على Escape
-    const closeOnEsc = (e) => {
-        if (e.key === 'Escape') {
-            modal.remove();
-            document.removeEventListener('keydown', closeOnEsc);
-        }
-    };
-    document.addEventListener('keydown', closeOnEsc);
-};
- 
 // =============================================
-// 2. دوال إدارة صفحة الصديق
+// نظام صفحة الصديق - نسخة موحدة ونظيفة
 // =============================================
 
-// دالة فتح صفحة الصديق
-window.viewFriendProfile = async function(friendId) {
-updateFriendsCount(friendId);
-    if (!friendId) {
-        console.error('No friend ID provided');
-        return;
+let currentFriendId = null;
+let currentFriendData = null;
+let friendshipStatus = 'none'; // none, pending_sent, pending_received, friends
+
+// 1. تهيئة النظام وإضافة التنسيقات
+function initFriendProfileSystem() {
+    if (!document.getElementById('friendProfileStyles')) {
+        const style = document.createElement('style');
+        style.id = 'friendProfileStyles';
+        style.textContent = `
+            .friend-profile-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: #f0f2f5;
+                z-index: 9999;
+                overflow-y: auto;
+                display: none;
+            }
+            .friend-profile-container {
+                max-width: 940px;
+                margin: 0 auto;
+                background: #fff;
+                min-height: 100vh;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            }
+            .friend-cover-section {
+                position: relative;
+                height: 280px;
+                background: linear-gradient(135deg, #1877f2, #0d47a1);
+                background-size: cover;
+                background-position: center;
+            }
+            .friend-back-btn {
+                position: absolute;
+                top: 15px;
+                right: 15px;
+                background: rgba(0,0,0,0.6);
+                color: #fff;
+                border: none;
+                padding: 10px 18px;
+                border-radius: 25px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                z-index: 10;
+                transition: background 0.2s;
+            }
+            .friend-back-btn:hover {
+                background: rgba(0,0,0,0.8);
+            }
+            .friend-header-info {
+                padding: 0 25px 20px;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-end;
+                justify-content: space-between;
+                margin-top: -65px;
+                position: relative;
+                border-bottom: 1px solid #e4e6eb;
+            }
+            .friend-avatar-wrapper {
+                display: flex;
+                align-items: flex-end;
+                gap: 20px;
+            }
+            .friend-main-avatar {
+                width: 140px;
+                height: 140px;
+                border-radius: 50%;
+                border: 4px solid #fff;
+                background: #4a6cf7;
+                color: #fff;
+                font-size: 52px;
+                font-weight: bold;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                cursor: pointer;
+            }
+            .friend-main-avatar img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
+            .friend-name-meta {
+                padding-bottom: 10px;
+            }
+            .friend-name-meta h2 {
+                margin: 0 0 5px;
+                font-size: 26px;
+                color: #050505;
+            }
+            .friend-name-meta p {
+                margin: 0;
+                color: #65676b;
+                font-size: 15px;
+            }
+            .friend-action-buttons {
+                display: flex;
+                gap: 10px;
+                padding-bottom: 10px;
+            }
+            .friend-nav-tabs {
+                display: flex;
+                gap: 5px;
+                padding: 0 20px;
+                border-bottom: 1px solid #e4e6eb;
+                background: #fff;
+                position: sticky;
+                top: 0;
+                z-index: 5;
+            }
+            .friend-tab-item {
+                padding: 15px 20px;
+                border: none;
+                background: transparent;
+                font-size: 15px;
+                font-weight: 600;
+                color: #65676b;
+                cursor: pointer;
+                border-bottom: 3px solid transparent;
+                transition: all 0.2s;
+            }
+            .friend-tab-item.active {
+                color: #1877f2;
+                border-bottom-color: #1877f2;
+            }
+            .friend-tab-panel {
+                display: none;
+                padding: 20px;
+            }
+            .friend-tab-panel.active {
+                display: block;
+            }
+        `;
+        document.head.appendChild(style);
     }
-    console.log('Opening friend profile for:', friendId);
-    currentFriendId = friendId;
-    
+}
+
+// 2. فتح ملف الصديق
+window.viewFriendProfile = async function(friendId) {
     try {
-        // إظهار صفحة الصديق
-        const profilePage = document.getElementById('friendProfilePage');
-        if (!profilePage) {
-            console.error('Friend profile page not found');
+        const currentUser = firebase.auth().currentUser;
+        if (!currentUser) {
+            alert('يرجى تسجيل الدخول أولاً');
             return;
         }
-        
-        profilePage.classList.add('active');
-        document.body.style.overflow = 'hidden';
-        
-        // إعادة تعيين المحتوى
-        resetFriendProfileContent();
-        
-        // تحميل بيانات الصديق
-        await loadFriendData(friendId);
-        
-        // تحميل المحتوى الأولي (المنشورات)
-        await loadFriendPosts();
-        
-        // تفعيل التبويب الأول
-        await switchFriendTab('posts');
-        
-        console.log('Friend profile opened successfully');
-        
-    } catch (error) {
-        console.error('Error opening friend profile:', error);
-        // استخدم showFriendError بدلاً من دالة غير معرفة
-        if (window.showFriendError) {
-            window.showFriendError('حدث خطأ في فتح صفحة الصديق');
-        } else {
-            console.error('showFriendError not defined');
+
+        if (friendId === currentUser.uid) {
+            if (window.pageManager) window.pageManager.showPage('posts');
+            return;
         }
- 
+
+        // إيقاف أي فيديو يعمل في الصفحة الرئيسية قبل فتح ملف الصديق
+        if (typeof stopAllActiveVideos === 'function') {
+            stopAllActiveVideos(null);
+        }
+
+        initFriendProfileSystem();
+        currentFriendId = friendId;
+
+        let overlay = document.getElementById('friendProfileOverlay');
+        if (!overlay) {
+            overlay = createFriendProfileOverlay();
+            document.body.appendChild(overlay);
+        }
+
+        overlay.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+
+        // إعادة تعيين التبويبات إلى المنشورات
+        window.switchFriendTab('posts');
+
+        // جلب بيانات الصديق وحالة الصداقة بالتوازي
+        const [userDoc, status] = await Promise.all([
+            db.collection('users').doc(friendId).get(),
+            checkFriendshipStatus(currentUser.uid, friendId)
+        ]);
+
+        if (!userDoc.exists) {
+            alert('المستخدم غير موجود');
+            window.closeFriendProfile();
+            return;
+        }
+
+        currentFriendData = userDoc.data();
+        friendshipStatus = status;
+
+        renderFriendProfileHeader(currentFriendData, friendId);
+        renderFriendActionButton();
+
+        // تحديث عداد أصدقاء الصديق وتحميل محتويات التبويبات
+        window.updateFriendsCount(friendId);
+        loadFriendPosts(friendId);
+        loadFriendAbout(currentFriendData);
+        loadFriendFriendsList(friendId);
+        loadFriendPhotosList(friendId);
+
+    } catch (error) {
+        console.error('❌ خطأ في فتح ملف الصديق:', error);
     }
 };
 
-// دالة إغلاق صفحة الصديق
+// 3. إغلاق ملف الصديق وإيقاف أي وسائط تعمل بداخله
 window.closeFriendProfile = function() {
-    const profilePage = document.getElementById('friendProfilePage');
-    if (profilePage) {
-        profilePage.classList.remove('active');
+    if (typeof stopAllActiveVideos === 'function') {
+        stopAllActiveVideos(null);
     }
-    document.body.style.overflow = 'auto';
+    const overlay = document.getElementById('friendProfileOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+    document.body.style.overflow = '';
     currentFriendId = null;
     currentFriendData = null;
 };
 
-// دالة لإعادة تعيين محتوى صفحة الصديق
-function resetFriendProfileContent() {
-    // إعادة تعيين الصورة الشخصية
-    const profileAvatar = document.getElementById('friendProfileAvatar');
-    if (profileAvatar) {
-        profileAvatar.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        profileAvatar.className = 'friend-profile-avatar';
-        profileAvatar.style.cssText = '';
-    }
-    
-    // إعادة تعيين صورة الغلاف
-    const coverPhoto = document.getElementById('friendCoverPhoto');
-    if (coverPhoto) {
-        coverPhoto.style.backgroundImage = 'none';
-        coverPhoto.style.backgroundColor = '#f0f2f5';
-        coverPhoto.innerHTML = '';
-        coverPhoto.className = 'friend-cover-photo';
-    }
-    
-    // إعادة تعيين الاسم
-    const profileName = document.getElementById('friendProfileName');
-    if (profileName) {
-        profileName.textContent = 'جاري التحميل...';
-    }
-    
-    // إعادة تعيين عدد الأصدقاء
-    const friendsElement = document.getElementById('friendProfileFriends');
-    if (friendsElement) {
-        friendsElement.textContent = 'جاري التحميل...';
-    }
-    
-    // إعادة تعيين أزرار الصداقة
-    const addFriendBtn = document.getElementById('addFriendBtn');
-    const friendStatusBtn = document.getElementById('friendStatusBtn');
-    if (addFriendBtn) {
-        addFriendBtn.style.display = 'none';
-        addFriendBtn.className = 'friend-action-btn primary';
-    }
-    if (friendStatusBtn) {
-        friendStatusBtn.style.display = 'none';
-        friendStatusBtn.className = 'friend-action-btn primary';
-    }
-    
-    // إعادة تعيين المحتوى
-    resetTabContent();
-}
-
-// إعادة تعيين محتوى التبويبات
-function resetTabContent() {
-    const tabs = ['posts', 'about', 'photos', 'friends'];
-    tabs.forEach(tab => {
-        const tabId = `friend${capitalizeFirst(tab)}Tab`;
-        const tabElement = document.getElementById(tabId);
-        if (tabElement) {
-            tabElement.style.display = 'none';
-            tabElement.classList.remove('active');
-        }
-        
-        const containerId = `friend${capitalizeFirst(tab)}Container`;
-        const container = document.getElementById(containerId);
-        if (container) {
-            container.innerHTML = '';
-        }
-    });
-}
-
-// =============================================
-// 3. دوال تحميل البيانات الأساسية
-// =============================================
-
-// تحميل بيانات الصديق
-async function loadFriendData(friendId) {
-
-    try {
-        console.log('Loading friend data for:', friendId);
-        
-        const userDoc = await db.collection('users').doc(friendId).get();
-        if (!userDoc.exists) {
-            throw new Error('المستخدم غير موجود');
-        }
-        
-        currentFriendData = userDoc.data();
-        console.log('Friend data loaded:', currentFriendData);
-        
-        // تحديث جميع عناصر الواجهة
-        updateFriendProfileUI();
-        
-        // تحديث عدد الأصدقاء
-        if (window.getFriendsCount) {
-            const friendsCount = await window.getFriendsCount(friendId);
-            updateFriendsCount(friendsCount);
-        } else {
-            console.error('getFriendsCount function not found');
-            updateFriendsCount(0);
-        }
-        
-        // تحديث حالة الصداقة
-        await updateFriendshipStatus(friendId);
-        
-        console.log('Friend data updated successfully');
-
-    } catch (error) {
-        console.error('Error loading friend data:', error);
-        // استخدام showFriendError إذا كانت معرفة
-        if (window.showFriendError) {
-            window.showFriendError('حدث خطأ في تحميل بيانات الصديق');
-        }
-        throw error;
-    }
-}
-
-// تحديث واجهة صفحة الصديق
-function updateFriendProfileUI() {
-       
-    if (!currentFriendData) return;
-    
-    console.log('Updating friend profile UI');
-    
-    // 1. تحديث الاسم
-    const profileName = document.getElementById('friendProfileName');
-    if (profileName) {
-        profileName.textContent = currentFriendData.name || 'مستخدم';
-        profileName.className = 'friend-profile-name';
-    }
-    
-    // 2. تحديث الصورة الشخصية
-    updateProfilePicture();
-    
-    // 3. تحديث صورة الغلاف
-    updateCoverPicture();
-    
-    // 4. تحديث تخطيط الصفحة
-    updatePageLayout();
-}
-
-// تحديث تخطيط الصفحة
-function updatePageLayout() {
-    // تأكد من أن المحتوى يظهر بشكل صحيح
-    const profilePage = document.getElementById('friendProfilePage');
-    if (profilePage) {
-        profilePage.style.display = 'block';
-        profilePage.style.position = 'fixed';
-        profilePage.style.top = '0';
-        profilePage.style.left = '0';
-        profilePage.style.width = '100%';
-        profilePage.style.height = '100%';
-        profilePage.style.overflowY = 'auto';
-        profilePage.style.background = 'white';
-        profilePage.style.zIndex = '10000';
-    }
-    
-    // تأكد من ظهور محتوى التبويبات
-    setTimeout(() => {
-        const activeTab = document.querySelector('.friend-tab.active');
-        if (activeTab) {
-            activeTab.style.display = 'block';
-            activeTab.style.opacity = '1';
-        }
-    }, 100);
-}
-
- 
-// دالة لتحديث الصورة الشخصية
-function updateProfilePicture() {
-    const profileAvatar = document.getElementById('friendProfileAvatar');
-    if (!profileAvatar || !currentFriendData) return;
-    
-    console.log('Updating profile picture');
-    
-    // تنظيف المحتوى القديم
-    profileAvatar.innerHTML = '';
-    profileAvatar.className = 'friend-profile-avatar';
-    
-    // جرب عدة أسماء محتملة للحقول
-    const possiblePhotoFields = ['photoURL', 'profilePicture', 'avatar', 'photoUrl', 'profileImage', 'image'];
-    const photoUrl = getFieldValue(possiblePhotoFields, currentFriendData);
-    
-    if (photoUrl && photoUrl.trim() !== '') {
-        console.log('Found profile picture URL:', photoUrl);
-        
-        // إذا كانت هناك صورة شخصية
-        const img = document.createElement('img');
-        img.src = photoUrl;
-        img.alt = currentFriendData.name || 'صورة الملف الشخصي';
-        img.className = 'friend-profile-img';
-        img.style.cssText = `
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            object-fit: cover;
-            display: block;
-        `;
-        
-        img.onload = () => {
-            console.log('Profile image loaded successfully');
-            profileAvatar.style.background = 'none';
-            
-            // إضافة زر التكبير بعد تحميل الصورة
-            if (window.addProfileImageZoom) {
-                setTimeout(window.addProfileImageZoom, 100);
-            }
-        };
-        
-        img.onerror = () => {
-            console.log('Profile image failed to load, using default');
-            showDefaultProfilePicture(profileAvatar);
-        };
-        
-        profileAvatar.appendChild(img);
-    } else {
-        console.log('No profile picture found, using default');
-        showDefaultProfilePicture(profileAvatar);
-    }
-}
-
-// دالة لتحديث صورة الغلاف
- function updateCoverPicture() {
-    const coverPhoto = document.getElementById('friendCoverPhoto');
-    if (!coverPhoto || !currentFriendData) return;
-    
-    const possibleCoverFields = [
-        'coverURL', 'coverPhoto', 'coverImage', 'coverUrl', 
-        'backgroundImage', 'coverPicture', 'cover', 'coverPhotoURL', 'cover_photo'
-    ];
-    
-    let coverUrl = null;
-    for (const field of possibleCoverFields) {
-        if (currentFriendData[field] && typeof currentFriendData[field] === 'string' && currentFriendData[field].trim() !== '') {
-            coverUrl = currentFriendData[field].trim();
-            break;
-        }
-    }
-    
-    if (coverUrl) {
-        testImage(coverUrl).then((isValid) => {
-            if (isValid) {
-                coverPhoto.style.backgroundImage = `url('${coverUrl}')`;
-                coverPhoto.style.backgroundSize = 'cover';
-                coverPhoto.style.backgroundPosition = 'center';
-                coverPhoto.style.backgroundColor = 'transparent';
-                coverPhoto.innerHTML = '';
-            } else {
-                showDefaultCoverPicture(coverPhoto);
-            }
-        }).catch(() => showDefaultCoverPicture(coverPhoto));
-    } else {
-        showDefaultCoverPicture(coverPhoto);
-    }
-}
-
-// دالة تحديث الصورة الشخصية
-function updateProfilePicture() {
-    const avatar = document.getElementById('friendProfileAvatar');
-    if (!avatar) return;
-    
-    const photoUrl = currentFriendData.photoURL || currentFriendData.profilePicture || currentFriendData.avatar;
-    if (photoUrl) {
-        avatar.innerHTML = `<img src="${photoUrl}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
-    } else {
-        const initial = (currentFriendData.name || 'U').charAt(0).toUpperCase();
-        avatar.innerHTML = `<div class="avatar-placeholder">${initial}</div>`;
-    }
-}
-
-// دالة التبديل بين التبويبات
-async function switchFriendTab(tabName) {
-    const tabs = ['posts', 'about', 'photos', 'friends'];
-    tabs.forEach(t => {
-        const content = document.getElementById(`friend${capitalizeFirst(t)}Tab`);
-        if (content) content.style.display = 'none';
-        
-        const btn = document.querySelector(`[onclick="switchFriendTab('${t}')"]`);
-        if (btn) btn.classList.remove('active');
-    });
-
-    const activeTab = document.getElementById(`friend${capitalizeFirst(tabName)}Tab`);
-    const activeBtn = document.querySelector(`[onclick="switchFriendTab('${tabName}')"]`);
-    
-    if (activeTab) activeTab.style.display = 'block';
-    if (activeBtn) activeBtn.classList.add('active');
-
-    // تحميل محتوى التبويب (مثل المنشورات)
-    if (tabName === 'posts') await loadFriendPosts();
-}
-
-// دالة اختبار الصورة
-function testImage(url) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(true);
-        img.onerror = () => resolve(false);
-        img.src = url;
-        setTimeout(() => resolve(false), 5000);
-    });
-}
-
-// عرض الصورة الشخصية الافتراضية
-function showDefaultProfilePicture(element) {
-    element.innerHTML = '<i class="fas fa-user"></i>';
-    element.style.cssText = `
-        width: 168px;
-        height: 168px;
-        border-radius: 50%;
-        border: 5px solid white;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 48px;
-        color: white;
-        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
-        position: relative;
-        z-index: 2;
+// 4. إنشاء هيكل نافذة ملف الصديق
+function createFriendProfileOverlay() {
+    const div = document.createElement('div');
+    div.id = 'friendProfileOverlay';
+    div.className = 'friend-profile-overlay';
+    div.innerHTML = `
+        <div class="friend-profile-container">
+            <div class="friend-cover-section" id="friendCoverPhoto">
+                <button class="friend-back-btn" onclick="window.closeFriendProfile()">
+                    <i class="fas fa-arrow-right"></i> رجوع
+                </button>
+            </div>
+            <div class="friend-header-info">
+                <div class="friend-avatar-wrapper">
+                    <div class="friend-main-avatar" id="friendProfileAvatar" title="اضغط لتكبير الصورة"></div>
+                    <div class="friend-name-meta">
+                        <h2 id="friendProfileName">جاري التحميل...</h2>
+                        <p id="friendProfileJob"></p>
+                        <p id="friendProfileFriends" style="font-weight: 600; margin-top: 4px;"></p>
+                    </div>
+                </div>
+                <div class="friend-action-buttons" id="friendActionButtons"></div>
+            </div>
+            <div class="friend-nav-tabs">
+                <button class="friend-tab-item active" data-ftab="posts" onclick="window.switchFriendTab('posts')">المنشورات</button>
+                <button class="friend-tab-item" data-ftab="about" onclick="window.switchFriendTab('about')">حول</button>
+                <button class="friend-tab-item" data-ftab="friends" onclick="window.switchFriendTab('friends')">الأصدقاء</button>
+                <button class="friend-tab-item" data-ftab="photos" onclick="window.switchFriendTab('photos')">الصور</button>
+            </div>
+            <div id="friendTab-posts" class="friend-tab-panel active">
+                <div id="friendPostsContainer"><div class="loading">جاري تحميل المنشورات...</div></div>
+            </div>
+            <div id="friendTab-about" class="friend-tab-panel">
+                <div id="friendAboutContainer"></div>
+            </div>
+            <div id="friendTab-friends" class="friend-tab-panel">
+                <div id="friendFriendsGrid" class="friends-grid"></div>
+            </div>
+            <div id="friendTab-photos" class="friend-tab-panel">
+                <div id="friendPhotosGrid" class="photos-grid"></div>
+            </div>
+        </div>
     `;
+    return div;
 }
 
-// عرض صورة الغلاف الافتراضية
-function showDefaultCoverPicture(element) {
-    element.style.backgroundImage = 'none';
-    element.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-    element.style.display = 'flex';
-    element.style.alignItems = 'center';
-    element.style.justifyContent = 'center';
-    element.style.height = '350px';
-    element.style.width = '100%';
-    element.innerHTML = '<i class="fas fa-image" style="font-size: 48px; color: white; opacity: 0.7;"></i>';
-}
+// 5. تحديث الصورة الشخصية والغلاف مع ميزة التكبير
+function renderFriendProfileHeader(data, friendId) {
+    const nameEl = document.getElementById('friendProfileName');
+    const jobEl = document.getElementById('friendProfileJob');
+    const coverEl = document.getElementById('friendCoverPhoto');
+    const avatarEl = document.getElementById('friendProfileAvatar');
 
-// =============================================
-// 4. دوال إدارة التبويبات - مصححة
-// =============================================
+    if (nameEl) nameEl.textContent = data.name || 'مستخدم';
+    if (jobEl) jobEl.textContent = data.job || '';
 
-// دالة تبديل التبويبات - النسخة المصححة
-window.switchFriendTab = async function(tab) {
-    console.log('Switching to tab:', tab);
-    
-    try {
-        // 1. تنظيف اسم التبويب من الفراغات
-        const cleanTab = tab.trim();
-        
-        // 2. تحديث أزرار التنقل
-        updateActiveTabButtons(cleanTab);
-        
-        // 3. إخفاء جميع التبويبات
-        hideAllTabs();
-        
-        // 4. إظهار التبويب المطلوب
-        const activeTabId = `friend${capitalizeFirst(cleanTab)}Tab`;
-        const activeTab = document.getElementById(activeTabId);
-        
-        if (activeTab) {
-            activeTab.style.display = 'block';
-            activeTab.classList.add('active');
-            activeTab.style.opacity = '1';
-            activeTab.style.transition = 'opacity 0.3s';
-            
-            // 5. تحميل محتوى التبويب
-            await loadTabContent(cleanTab);
-            
-            console.log(`Tab ${cleanTab} activated successfully`);
+    if (coverEl) {
+        if (data.coverPicture) {
+            coverEl.style.backgroundImage = `url('${data.coverPicture}')`;
         } else {
-            console.error(`Tab not found: ${activeTabId}`);
-            // لا ننشئ تبويباً جديداً، بل نستخدم التبويب الموجود في HTML
+            coverEl.style.backgroundImage = 'linear-gradient(135deg, #1877f2, #0d47a1)';
         }
-        
+    }
+
+    if (avatarEl) {
+        const photoUrl = data.profilePicture || data.photoURL;
+        const initial = (data.name || 'م').charAt(0).toUpperCase();
+
+        if (photoUrl) {
+            avatarEl.innerHTML = `<img src="${photoUrl}" alt="${data.name || ''}" onerror="this.parentElement.innerHTML='${initial}'">`;
+            avatarEl.onclick = () => {
+                if (typeof openImageModal === 'function') {
+                    openImageModal(photoUrl);
+                } else {
+                    window.open(photoUrl, '_blank');
+                }
+            };
+        } else {
+            avatarEl.innerHTML = initial;
+            avatarEl.onclick = null;
+        }
+    }
+}
+
+// 6. فحص حالة الصداقة الحالية
+async function checkFriendshipStatus(myUid, friendId) {
+    const friendDoc = await db.collection('users').doc(myUid).collection('friends').doc(friendId).get();
+    if (friendDoc.exists) return 'friends';
+
+    const sentReq = await db.collection('friendRequests')
+        .where('from', '==', myUid)
+        .where('to', '==', friendId)
+        .where('status', '==', 'pending')
+        .get();
+    if (!sentReq.empty) return 'pending_sent';
+
+    const receivedReq = await db.collection('friendRequests')
+        .where('from', '==', friendId)
+        .where('to', '==', myUid)
+        .where('status', '==', 'pending')
+        .get();
+    if (!receivedReq.empty) return 'pending_received';
+
+    return 'none';
+}
+
+// 7. عرض زر الإجراء المناسب حسب حالة الصداقة
+function renderFriendActionButton() {
+    const container = document.getElementById('friendActionButtons');
+    if (!container || !currentFriendId) return;
+
+    if (friendshipStatus === 'friends') {
+        container.innerHTML = `
+            <button class="btn-secondary" onclick="window.toggleFriendshipAction('remove')" style="padding: 10px 18px; border-radius: 8px; border: none; background: #e4e6eb; color: #050505; font-weight: 600; cursor: pointer;">
+                <i class="fas fa-user-check"></i> أصدقاء (إلغاء الصداقة)
+            </button>
+        `;
+    } else if (friendshipStatus === 'pending_sent') {
+        container.innerHTML = `
+            <button class="btn-secondary" disabled style="padding: 10px 18px; border-radius: 8px; border: none; background: #e4e6eb; color: #65676b; font-weight: 600;">
+                <i class="fas fa-clock"></i> تم إرسال الطلب
+            </button>
+        `;
+    } else if (friendshipStatus === 'pending_received') {
+        container.innerHTML = `
+            <button class="btn-primary" onclick="window.toggleFriendshipAction('accept')" style="padding: 10px 18px; border-radius: 8px; border: none; background: #1877f2; color: #fff; font-weight: 600; cursor: pointer;">
+                <i class="fas fa-user-plus"></i> قبول طلب الصداقة
+            </button>
+        `;
+    } else {
+        container.innerHTML = `
+            <button class="btn-primary" onclick="window.toggleFriendshipAction('add')" style="padding: 10px 18px; border-radius: 8px; border: none; background: #1877f2; color: #fff; font-weight: 600; cursor: pointer;">
+                <i class="fas fa-user-plus"></i> إضافة صديق
+            </button>
+        `;
+    }
+}
+
+// 8. تنفيذ إجراء الصداقة من داخل ملف الصديق
+window.toggleFriendshipAction = async function(action) {
+    const currentUser = firebase.auth().currentUser;
+    if (!currentUser || !currentFriendId) return;
+
+    try {
+        if (action === 'add') {
+            await db.collection('friendRequests').add({
+                from: currentUser.uid,
+                to: currentFriendId,
+                status: 'pending',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            friendshipStatus = 'pending_sent';
+            renderFriendActionButton();
+        } else if (action === 'remove') {
+            await window.removeFriend(currentFriendId);
+            friendshipStatus = 'none';
+            renderFriendActionButton();
+            window.updateFriendsCount(currentFriendId);
+        } else if (action === 'accept') {
+            const reqSnap = await db.collection('friendRequests')
+                .where('from', '==', currentFriendId)
+                .where('to', '==', currentUser.uid)
+                .where('status', '==', 'pending')
+                .get();
+            if (!reqSnap.empty) {
+                const reqId = reqSnap.docs[0].id;
+                const dummyBtn = document.createElement('button');
+                await window.handleAcceptRequest(reqId, currentFriendId, dummyBtn);
+                friendshipStatus = 'friends';
+                renderFriendActionButton();
+                window.updateFriendsCount(currentFriendId);
+            }
+        }
     } catch (error) {
-        console.error('Error switching tab:', error);
+        console.error('❌ خطأ في تحديث حالة الصداقة:', error);
     }
 };
 
-// تحديث الأزرار النشطة
-function updateActiveTabButtons(tab) {
-    const navButtons = document.querySelectorAll('.friend-profile-nav .nav-btn');
-    navButtons.forEach(btn => {
-        btn.classList.remove('active');
-        btn.style.color = '#65676b';
-        btn.style.borderBottom = '3px solid transparent';
-    });
-    
-    // البحث عن الزر المطابق للتبويب باستخدام الاسم العربي
-    const arabicTabNames = {
-        'posts': 'المنشورات',
-        'about': 'حول',
-        'photos': 'الصور',
-        'friends': 'الأصدقاء'
-    };
-    
-    const arabicTabName = arabicTabNames[tab];
-    const activeBtn = Array.from(navButtons).find(btn => {
-        const span = btn.querySelector('span');
-        if (span) {
-            return span.textContent.includes(arabicTabName);
-        }
-        return false;
-    });
-    
-    if (activeBtn) {
-        activeBtn.classList.add('active');
-        activeBtn.style.color = '#1877f2';
-        activeBtn.style.borderBottom = '3px solid #1877f2';
-        console.log(`Button for tab ${tab} activated`);
+// 9. التبديل الموحد بين تبويبات ملف الصديق
+window.switchFriendTab = function(tabName) {
+    if (typeof stopAllActiveVideos === 'function') {
+        stopAllActiveVideos(null);
     }
-}
 
-// إخفاء جميع التبويبات
-function hideAllTabs() {
-    const tabs = document.querySelectorAll('.friend-tab');
-    tabs.forEach(tab => {
-        tab.style.display = 'none';
-        tab.classList.remove('active');
-        tab.style.opacity = '0';
+    document.querySelectorAll('.friend-tab-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.ftab === tabName);
     });
-    console.log('All tabs hidden');
-}
 
-// تحميل محتوى التبويب
-async function loadTabContent(tab) {
-    console.log(`Loading content for tab: ${tab}`);
-    
-    const containerId = `friend${capitalizeFirst(tab)}Container`;
-    const container = document.getElementById(containerId);
-    
-    if (!container) {
-        console.error(`Container not found: ${containerId}`);
-        return;
-    }
-    
-    // إظهار حالة التحميل
-    container.innerHTML = createLoadingHTML(tab);
-    
-    try {
-        switch(tab) {
-            case 'posts':
-                await loadFriendPosts();
-                break;
-            case 'about':
-                await loadFriendAbout();
-                break;
-            case 'photos':
-                await loadFriendPhotos();
-                break;
-            case 'friends':
-                await loadFriendFriends();
-                break;
-            default:
-                console.error('Unknown tab:', tab);
-                container.innerHTML = `<div style="padding: 40px; text-align: center; color: #666;">
-                    <h3>التبويب غير معروف</h3>
-                </div>`;
-        }
-    } catch (error) {
-        console.error(`Error loading tab ${tab}:`, error);
-        container.innerHTML = createErrorHTML(tab);
-    }
-}
+    document.querySelectorAll('.friend-tab-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
 
-// إنشاء HTML لحالة التحميل
-function createLoadingHTML(tab) {
-    const tabNames = {
-        'posts': 'المنشورات',
-        'about': 'المعلومات',
-        'photos': 'الصور',
-        'friends': 'الأصدقاء'
-    };
-    
-    return `
-        <div class="friend-loading">
-            <div class="loading-spinner">
-                <i class="fas fa-spinner fa-spin"></i>
-            </div>
-            <h3>جاري تحميل ${tabNames[tab] || 'المحتوى'}</h3>
-            <p>يرجى الانتظار...</p>
-        </div>
-    `;
-}
+    const targetPanel = document.getElementById(`friendTab-${tabName}`);
+    if (targetPanel) targetPanel.classList.add('active');
+};
 
-// إنشاء HTML لحالة الخطأ
-function createErrorHTML(tab) {
-    const tabNames = {
-        'posts': 'المنشورات',
-        'about': 'المعلومات',
-        'photos': 'الصور',
-        'friends': 'الأصدقاء'
-    };
-    
-    return `
-        <div class="friend-error">
-            <i class="fas fa-exclamation-triangle"></i>
-            <h3>حدث خطأ</h3>
-            <p>تعذر تحميل ${tabNames[tab] || 'المحتوى'}</p>
-            <button onclick="switchFriendTab('${tab}')" class="retry-btn">
-                إعادة المحاولة
-            </button>
-        </div>
-    `;
-}
-
-// دالة مساعدة لتحويل أول حرف إلى كبير
-function capitalizeFirst(string) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
-}
-
-// =============================================
-// 5. دوال تحميل المحتوى
-// =============================================
-
-// تحميل منشورات الصديق
-async function loadFriendPosts() {
+// 10. تحميل منشورات الصديق باستخدام مشغل الفيديو الموحد (.yt-box)
+async function loadFriendPosts(friendId) {
     const container = document.getElementById('friendPostsContainer');
-    if (!container || !currentFriendId) return;
-    
-    console.log('Loading friend posts for:', currentFriendId);
-    
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading">جاري تحميل المنشورات...</div>';
+
     try {
-        showLoading(container, 'جاري تحميل المنشورات');
-        
-        const postsSnapshot = await db.collection('posts')
-            .where('userId', '==', currentFriendId)
-            .where('privacy', 'in', ['public', 'friends'])
+        const snapshot = await db.collection('posts')
+            .where('userId', '==', friendId)
             .orderBy('timestamp', 'desc')
             .limit(20)
             .get();
-        
-        console.log(`Found ${postsSnapshot.size} posts`);
-        
-        if (postsSnapshot.empty) {
-            showNoData(container, 'لا توجد منشورات', 'لم يقم هذا المستخدم بنشر أي منشورات عامة بعد', 'far fa-newspaper');
+
+        if (snapshot.empty) {
+            container.innerHTML = '<div class="no-posts-message" style="text-align:center; padding:30px; color:#65676b;">لا توجد منشورات لعرضها</div>';
             return;
         }
-        
-        let postsHTML = '<div class="friend-posts-list">';
-        postsSnapshot.forEach(doc => {
+
+        let html = '';
+        snapshot.forEach(doc => {
             const post = doc.data();
-            postsHTML += createFriendPostElement(post, doc.id);
+            // إظهار المنشورات العامة أو منشورات الأصدقاء فقط
+            if (post.privacy === 'private') return;
+            if (post.privacy === 'friends' && friendshipStatus !== 'friends') return;
+
+            html += buildFriendPostHTML(post, doc.id);
         });
-        postsHTML += '</div>';
-        
-        container.innerHTML = postsHTML;
-        console.log('Posts loaded successfully');
-        
+
+        container.innerHTML = html || '<div class="no-posts-message" style="text-align:center; padding:30px; color:#65676b;">لا توجد منشورات متاحة للعرض</div>';
     } catch (error) {
-        console.error('Error loading friend posts:', error);
-        showError(container, 'حدث خطأ', 'تعذر تحميل المنشورات');
+        console.error('❌ خطأ في تحميل منشورات الصديق:', error);
+        container.innerHTML = '<div class="error-state">تعذر تحميل المنشورات</div>';
     }
 }
 
-// إنشاء عنصر منشور للصديق
-function createFriendPostElement(post, postId) {
-    const date = post.timestamp?.toDate ? 
-        formatPostDate(post.timestamp.toDate()) : 'الآن';
-    
-    const hasLiked = post.likes?.includes(window.authSystem?.currentUser?.uid);
-    
-    // الحصول على بيانات المستخدم للمنشور
-    const userName = post.userName || currentFriendData?.name || 'مستخدم';
-    const userPhoto = post.userPhoto || currentFriendData?.photoURL || getDefaultAvatar();
-    
+function buildFriendPostHTML(post, postId) {
+    const dateStr = post.timestamp ? formatUnifiedDate(post.timestamp.toDate()) : 'الآن';
+    const contentHTML = formatUnifiedPostText(post.content || '');
+    const authorPhoto = (currentFriendData && currentFriendData.profilePicture) || generateAvatarSVG(post.userName, 40);
+
     let mediaHTML = '';
     if (post.imageUrl) {
-        mediaHTML = `
-            <div class="friend-post-media">
-                <img src="${post.imageUrl}" 
-                     alt="صورة المنشور" 
-                     onclick="viewImage('${post.imageUrl}', '${userName}')"
-                     class="post-image">
-            </div>
-        `;
-    } else if (post.videoData) {
-        mediaHTML = createVideoEmbed(post.videoData);
+        mediaHTML += `<div style="margin: 12px 0;"><img src="${post.imageUrl}" style="width:100%; max-height:450px; object-fit:cover; border-radius:10px;" loading="lazy"></div>`;
     }
-    
-    const contentHTML = processPostContent(post.content || '');
-    
+    if (post.videoData) {
+        mediaHTML += buildUnifiedVideoEmbed(post.videoData);
+    }
+
     return `
-        <div class="friend-post-card" data-post-id="${postId}">
-            <div class="friend-post-header">
-                <img src="${userPhoto}" 
-                     alt="${userName}"
-                     class="friend-post-avatar"
-                     onclick="viewFriendProfile('${post.userId}')">
-                <div class="friend-post-user-info">
-                    <h4 onclick="viewFriendProfile('${post.userId}')">
-                        ${userName}
-                    </h4>
-                    <div class="friend-post-time">
-                        <i class="far fa-clock"></i>
-                        <span>${date}</span>
-                        <span> • </span>
-                        <span class="privacy-badge">
-                            ${post.privacy === 'public' ? '🌍 عام' : '👥 الأصدقاء'}
-                        </span>
-                    </div>
+        <div class="post-card" style="background:#fff; border:1px solid #e4e6eb; border-radius:12px; padding:16px; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                <img src="${authorPhoto}" style="width:42px; height:42px; border-radius:50%; object-fit:cover;">
+                <div>
+                    <h4 style="margin:0; font-size:15px;">${post.userName || 'مستخدم'}</h4>
+                    <span style="font-size:12px; color:#65676b;">${dateStr}</span>
                 </div>
             </div>
-            
-            <div class="friend-post-content">
-                ${contentHTML}
-            </div>
-            
+            <div style="font-size:15px; line-height:1.6; color:#050505; margin-bottom:10px;">${contentHTML}</div>
             ${mediaHTML}
-            
-            <div class="friend-post-stats">
-                <span class="stat-item">
-                    <i class="far fa-thumbs-up"></i> 
-                    <span class="count">${post.likes?.length || 0}</span>
-                </span>
-                <span class="stat-item">
-                    <i class="far fa-comment"></i> 
-                    <span class="count">${post.comments?.length || 0}</span>
-                </span>
-                <span class="stat-item">
-                    <i class="fas fa-share"></i> 
-                    <span class="count">${post.shares || 0}</span>
-                </span>
-            </div>
-            
-            <div class="friend-post-actions">
-                <button class="friend-post-action-btn ${hasLiked ? 'liked' : ''}" 
-                        onclick="likeFriendPost('${postId}', this)">
-                    <i class="far fa-thumbs-up"></i>
-                    <span>${hasLiked ? 'معجب به' : 'أعجبني'}</span>
-                </button>
-                <button class="friend-post-action-btn" 
-                        onclick="commentOnFriendPost('${postId}')">
-                    <i class="far fa-comment"></i>
-                    <span>تعليق</span>
-                </button>
-                <button class="friend-post-action-btn" 
-                        onclick="shareFriendPost('${postId}')">
-                    <i class="fas fa-share"></i>
-                    <span>مشاركة</span>
-                </button>
-            </div>
         </div>
     `;
 }
 
-// معالجة محتوى المنشور
-function processPostContent(content) {
-    if (!content) return '<p style="color: #999; font-style: italic;">لا يوجد محتوى</p>';
-    
-    return content
-        .replace(/\n/g, '<br>')
-        .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="post-link">$1</a>')
-        .replace(/#(\w+[\u0600-\u06FF\w]*)/g, '<span class="hashtag">#$1</span>');
-}
-
-// إنشاء تضمين الفيديو
-function createVideoEmbed(videoData) {
+// 11. دوال مساعدة موحدة للفيديو والنصوص والتاريخ في ملف الصديق
+function buildUnifiedVideoEmbed(videoData) {
     if (!videoData) return '';
-    
     if (videoData.type === 'youtube' && videoData.id) {
         return `
-            <div class="friend-post-media">
-                <div class="video-container">
-                    <iframe src="https://www.youtube.com/embed/${videoData.id}" 
-                            frameborder="0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowfullscreen>
-                    </iframe>
+            <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
+                 style="margin: 12px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://i.ytimg.com/vi/${videoData.id}/hqdefault.jpg'), url('https://i.ytimg.com/vi/${videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+                    <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
                 </div>
+            </div>
+        `;
+    } else if (videoData.type === 'direct' && videoData.url) {
+        return `
+            <div style="margin: 12px 0;">
+                <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
+                    <source src="${videoData.url}" type="video/mp4">
+                </video>
             </div>
         `;
     }
     return '';
 }
 
-// الحصول على صورة افتراضية
-function getDefaultAvatar() {
-    return 'https://i.pravatar.cc/150?img=' + Math.floor(Math.random() * 70);
+function formatUnifiedPostText(text) {
+    if (!text) return '';
+    let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    safe = safe.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1877f2;">$1</a>');
+    safe = safe.replace(/#([؀-ۿ\w]+)/g, '<span style="color:#1877f2; font-weight:600;">#$1</span>');
+    return safe.replace(/
+/g, '<br>');
 }
 
-// تحميل معلومات الصديق
-async function loadFriendAbout() {
+function formatUnifiedDate(date) {
+    const diffMins = Math.floor((new Date() - date) / 60000);
+    if (diffMins < 1) return 'الآن';
+    if (diffMins < 60) return `قبل ${diffMins} دقيقة`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `قبل ${diffHours} ساعة`;
+    return date.toLocaleDateString('ar-LB', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// 12. تحميل معلومات (حول) وأصدقاء وصور الصديق
+function loadFriendAbout(data) {
     const container = document.getElementById('friendAboutContainer');
-    if (!container || !currentFriendData) return;
-    
-    try {
-        const aboutHTML = createAboutHTML();
-        container.innerHTML = aboutHTML;
-        
-    } catch (error) {
-        console.error('Error loading friend about:', error);
-        showError(container, 'حدث خطأ', 'تعذر تحميل المعلومات');
-    }
-}
-
-// إنشاء HTML للمعلومات
-function createAboutHTML() {
-    const friendData = currentFriendData;
-    
-    return `
-        <div class="friend-about-content">
-            <div class="friend-info-item">
-                <i class="fas fa-user"></i>
-                <div>
-                    <strong>الاسم الكامل:</strong>
-                    <span>${friendData.name || 'غير محدد'}</span>
-                </div>
-            </div>
-            <div class="friend-info-item">
-                <i class="fas fa-briefcase"></i>
-                <div>
-                    <strong>المهنة:</strong>
-                    <span>${friendData.job || 'غير محدد'}</span>
-                </div>
-            </div>
-            <div class="friend-info-item">
-                <i class="fas fa-graduation-cap"></i>
-                <div>
-                    <strong>التعليم:</strong>
-                    <span>${friendData.education || 'غير محدد'}</span>
-                </div>
-            </div>
-            <div class="friend-info-item">
-                <i class="fas fa-map-marker-alt"></i>
-                <div>
-                    <strong>المكان:</strong>
-                    <span>${friendData.location || 'غير محدد'}</span>
-                </div>
-            </div>
-            <div class="friend-info-item">
-                <i class="fas fa-calendar-alt"></i>
-                <div>
-                    <strong>تاريخ الانضمام:</strong>
-                    <span>${formatDate(friendData.createdAt)}</span>
-                </div>
-            </div>
-            ${friendData.bio ? `
-            <div class="friend-info-item">
-                <i class="fas fa-edit"></i>
-                <div>
-                    <strong>نبذة:</strong>
-                    <span>${friendData.bio}</span>
-                </div>
-            </div>
-            ` : ''}
+    if (!container) return;
+    container.innerHTML = `
+        <div style="background:#f7f8fa; padding:20px; border-radius:12px; line-height:2;">
+            <p><strong><i class="fas fa-briefcase"></i> العمل:</strong> ${data.job || 'غير محدد'}</p>
+            <p><strong><i class="fas fa-graduation-cap"></i> التعليم:</strong> ${data.education || 'غير محدد'}</p>
+            <p><strong><i class="fas fa-map-marker-alt"></i> السكن:</strong> ${data.location || 'لبنان'}</p>
+            <p><strong><i class="fas fa-info-circle"></i> نبذة:</strong> ${data.bio || 'لا توجد نبذة شخصية'}</p>
         </div>
     `;
 }
 
-// تحميل صور الصديق
-async function loadFriendPhotos() {
-    const container = document.getElementById('friendPhotosContainer');
-    if (!container || !currentFriendId) return;
-    
+async function loadFriendFriendsList(friendId) {
+    const grid = document.getElementById('friendFriendsGrid');
+    if (!grid) return;
     try {
-        showLoading(container, 'جاري تحميل الصور');
-        
-        // جلب المنشورات التي تحتوي على صور
-        const postsSnapshot = await db.collection('posts')
-            .where('userId', '==', currentFriendId)
-            .orderBy('timestamp', 'desc')
-            .limit(30)
-            .get();
-        
-        const photos = [];
-        postsSnapshot.forEach(doc => {
-            const post = doc.data();
-            if (post.imageUrl && post.imageUrl.trim() !== '') {
-                photos.push({ 
-                    id: doc.id, 
-                    ...post,
-                    userName: post.userName || currentFriendData.name || 'مستخدم'
-                });
-            }
-        });
-        
-        if (photos.length === 0) {
-            showNoData(container, 'لا توجد صور', 'لم يقم هذا المستخدم برفع أي صور بعد', 'far fa-images');
+        const snap = await db.collection('users').doc(friendId).collection('friends').limit(20).get();
+        if (snap.empty) {
+            grid.innerHTML = '<p style="color:#65676b;">لا يوجد أصدقاء لعرضهم</p>';
             return;
         }
-        
-        const photosHTML = createPhotosHTML(photos);
-        container.innerHTML = photosHTML;
-        
-    } catch (error) {
-        console.error('Error loading friend photos:', error);
-        showError(container, 'حدث خطأ', 'تعذر تحميل الصور');
-    }
-}
-
-// إنشاء HTML للصور
-function createPhotosHTML(photos) {
-    let html = '<div class="friend-photos-grid">';
-    photos.forEach(post => {
-        html += `
-            <div class="friend-photo-item" onclick="viewImage('${post.imageUrl}', '${post.userName}')">
-                <div class="photo-loading" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);">
-                    <i class="fas fa-circle-notch fa-spin"></i>
-                </div>
-                <img src="${post.imageUrl}" 
-                     alt="صورة ${post.userName}"
-                     style="width:100%; height:100%; object-fit:cover; border-radius:8px; opacity:0; transition:opacity 0.3s;"
-                     onload="this.style.opacity='1'; this.previousElementSibling.style.display='none'"
-                     onerror="this.previousElementSibling.style.display='none'; this.src='https://via.placeholder.com/300?text=Error+Loading+Image'">
-            </div>
-        `;
-    });
-    html += '</div>';
-    return html;
-}
-
-// تحميل أصدقاء الصديق
-async function loadFriendFriends() {
-    const container = document.getElementById('friendFriendsContainer');
-    if (!container || !currentFriendId) return;
-    
-    try {
-        showLoading(container, 'جاري تحميل الأصدقاء');
-        
-        if (window.getFriendsCount) {
-            const friendsCount = await window.getFriendsCount(currentFriendId);
-            if (friendsCount === 0) {
-                showNoData(container, 'لا توجد قائمة أصدقاء', 'لا يمكن عرض قائمة أصدقاء هذا المستخدم', 'far fa-user-friends');
-                return;
+        let html = '';
+        for (const doc of snap.docs) {
+            if (doc.id === friendId) continue;
+            const uDoc = await db.collection('users').doc(doc.id).get();
+            if (uDoc.exists) {
+                const u = uDoc.data();
+                const avatar = u.profilePicture || generateAvatarSVG(u.name, 60);
+                html += `
+                    <div onclick="window.viewFriendProfile('${doc.id}')" style="display:flex; align-items:center; gap:12px; padding:12px; border:1px solid #e4e6eb; border-radius:10px; cursor:pointer;">
+                        <img src="${avatar}" style="width:55px; height:55px; border-radius:50%; object-fit:cover;">
+                        <div>
+                            <h4 style="margin:0; font-size:15px;">${u.name || 'مستخدم'}</h4>
+                            <span style="font-size:13px; color:#65676b;">${u.job || ''}</span>
+                        </div>
+                    </div>
+                `;
             }
         }
-        
-        // جلب أصدقاء الصديق
-        const friends = await getFriendFriendsList(currentFriendId);
-        
-        if (friends.length === 0) {
-            showNoData(container, 'لا توجد قائمة أصدقاء', 'لا يمكن عرض قائمة أصدقاء هذا المستخدم', 'far fa-user-friends');
-            return;
-        }
-        
-        const friendsHTML = createFriendsHTML(friends);
-        container.innerHTML = friendsHTML;
-        
-    } catch (error) {
-        console.error('Error loading friend friends:', error);
-        showError(container, 'حدث خطأ', 'تعذر تحميل قائمة الأصدقاء');
+        grid.innerHTML = html || '<p style="color:#65676b;">لا يوجد أصدقاء لعرضهم</p>';
+    } catch (e) {
+        console.error(e);
     }
 }
 
-// جلب قائمة أصدقاء الصديق
-async function getFriendFriendsList(userId) {
+async function loadFriendPhotosList(friendId) {
+    const grid = document.getElementById('friendPhotosGrid');
+    if (!grid) return;
     try {
-        const friends = [];
-        
-        // البحث في friendships حيث يكون المستخدم هو user1
-        const friends1Snapshot = await db.collection('friendships')
-            .where('user1', '==', userId)
-            .where('status', '==', 'accepted')
+        const snap = await db.collection('posts')
+            .where('userId', '==', friendId)
+            .where('privacy', '==', 'public')
+            .limit(20)
             .get();
-        
-        for (const doc of friends1Snapshot.docs) {
-            const friendship = doc.data();
-            const friendId = friendship.user2;
-            const friendDoc = await db.collection('users').doc(friendId).get();
-            if (friendDoc.exists) {
-                friends.push({ id: friendId, ...friendDoc.data() });
+        let html = '';
+        snap.forEach(doc => {
+            const p = doc.data();
+            if (p.imageUrl) {
+                html += `<img src="${p.imageUrl}" style="width:100%; height:180px; object-fit:cover; border-radius:8px;" loading="lazy">`;
             }
-        }
-        
-        // البحث في friendships حيث يكون المستخدم هو user2
-        const friends2Snapshot = await db.collection('friendships')
-            .where('user2', '==', userId)
-            .where('status', '==', 'accepted')
-            .get();
-        
-        for (const doc of friends2Snapshot.docs) {
-            const friendship = doc.data();
-            const friendId = friendship.user1;
-            const friendDoc = await db.collection('users').doc(friendId).get();
-            if (friendDoc.exists && !friends.some(f => f.id === friendId)) {
-                friends.push({ id: friendId, ...friendDoc.data() });
-            }
-        }
-        
-        return friends.slice(0, 20); // تحديد العدد
-    } catch (error) {
-        console.error('Error getting friend friends list:', error);
-        return [];
-    }
-}
-
-// إنشاء HTML للأصدقاء
-function createFriendsHTML(friends) {
-    let html = '<div class="friend-friends-grid">';
-    friends.forEach(friend => {
-        const photoUrl = getFieldValue(['photoURL', 'profilePicture', 'avatar'], friend);
-        const displayName = friend.name || 'صديق';
-        
-        html += `
-            <div class="friend-friend-card" onclick="viewFriendProfile('${friend.id}')">
-                <div class="friend-friend-avatar">
-                    ${photoUrl ? 
-                        `<img src="${photoUrl}" alt="${displayName}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">` :
-                        `<i class="fas fa-user" style="font-size:36px; color:#666;"></i>`
-                    }
-                </div>
-                <h4>${displayName}</h4>
-                <p>${friend.job || ''}</p>
-            </div>
-        `;
-    });
-    html += '</div>';
-    return html;
-}
-
-// =============================================
-// 6. دوال المساعدة العامة
-// =============================================
-
-// عرض حالة التحميل
-function showLoading(container, message) {
-    container.innerHTML = `
-        <div class="friend-loading">
-            <div class="loading-spinner">
-                <i class="fas fa-spinner fa-spin"></i>
-            </div>
-            <h3>${message}</h3>
-            <p>يرجى الانتظار...</p>
-        </div>
-    `;
-}
-
-// عرض حالة عدم وجود بيانات
-function showNoData(container, title, message, icon) {
-    container.innerHTML = `
-        <div class="friend-no-data">
-            <i class="${icon}"></i>
-            <h3>${title}</h3>
-            <p>${message}</p>
-        </div>
-    `;
-}
-
-// عرض حالة الخطأ
-function showError(container, title, message) {
-    container.innerHTML = `
-        <div class="friend-error">
-            <i class="fas fa-exclamation-triangle"></i>
-            <h3>${title}</h3>
-            <p>${message}</p>
-            <button onclick="window.location.reload()" class="retry-btn">
-                إعادة المحاولة
-            </button>
-        </div>
-    `;
-}
-
-// تنسيق التاريخ
-function formatDate(date) {
-    if (!date) return 'غير معروف';
-    
-    try {
-        const dateObj = date.toDate ? date.toDate() : new Date(date);
-        const options = { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric'
-        };
-        
-        return dateObj.toLocaleDateString('ar-SA', options);
-    } catch (error) {
-        return 'غير معروف';
-    }
-}
-
-// تنسيق تاريخ المنشور
-function formatPostDate(date) {
-    if (!date) return 'الآن';
-    
-    try {
-        const now = new Date();
-        const diffMs = now - date;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-        
-        if (diffMins < 1) return 'الآن';
-        if (diffMins < 60) return `قبل ${diffMins} دقيقة`;
-        if (diffHours < 24) return `قبل ${diffHours} ساعة`;
-        if (diffDays < 7) return `قبل ${diffDays} يوم`;
-        
-        return date.toLocaleDateString('ar-LB', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
         });
-    } catch (error) {
-        return 'الآن';
+        grid.innerHTML = html || '<p style="color:#65676b;">لا توجد صور عامة</p>';
+    } catch (e) {
+        console.error(e);
     }
 }
 
-// =============================================
-// 7. دالة تحديث حالة الصداقة
-// =============================================
+ 
 
-// دالة لتحديث حالة الصداقة
-async function updateFriendshipStatus(friendId) {
-    const currentUserId = window.authSystem?.currentUser?.uid;
-    if (!currentUserId) return;
-    
-    try {
-        // إنشاء معرف الصداقة
-        const friendshipId = [currentUserId, friendId].sort().join('_');
-        
-        const friendshipDoc = await db.collection('friendships')
-            .doc(friendshipId)
-            .get();
-        
-        const addFriendBtn = document.getElementById('addFriendBtn');
-        const friendStatusBtn = document.getElementById('friendStatusBtn');
-        const friendStatusText = document.getElementById('friendStatusText');
-        
-        if (!friendshipDoc.exists) {
-            // ليسوا أصدقاء
-            if (addFriendBtn) addFriendBtn.style.display = 'flex';
-            if (friendStatusBtn) friendStatusBtn.style.display = 'none';
-        } else {
-            const friendship = friendshipDoc.data();
-            updateFriendshipUI(friendship.status, addFriendBtn, friendStatusBtn, friendStatusText);
-        }
-    } catch (error) {
-        console.error('Error updating friendship status:', error);
-    }
-}
-
-// تحديث واجهة حالة الصداقة
-function updateFriendshipUI(status, addFriendBtn, friendStatusBtn, friendStatusText) {
-    switch(status) {
-        case 'accepted':
-            // أصدقاء
-            if (addFriendBtn) addFriendBtn.style.display = 'none';
-            if (friendStatusBtn) {
-                friendStatusBtn.style.display = 'flex';
-                friendStatusBtn.className = 'friend-action-btn primary';
-                if (friendStatusText) friendStatusText.textContent = 'صديق';
-            }
-            break;
-            
-        case 'pending':
-            // طلب صداقة معلق
-            if (addFriendBtn) addFriendBtn.style.display = 'none';
-            if (friendStatusBtn) {
-                friendStatusBtn.style.display = 'flex';
-                friendStatusBtn.className = 'friend-action-btn warning';
-                if (friendStatusText) friendStatusText.textContent = 'طلب معلق';
-            }
-            break;
-            
-        case 'rejected':
-            // تم رفض الصداقة
-            if (addFriendBtn) addFriendBtn.style.display = 'flex';
-            if (friendStatusBtn) friendStatusBtn.style.display = 'none';
-            break;
-    }
-}
-
-// =============================================
-// 8. تهيئة النظام وإضافة CSS
-// =============================================
-
-// إضافة CSS ديناميكي لصفحة الصديق
-function addFriendProfileStyles() {
-    if (document.getElementById('friend-profile-styles')) return;
-    
-    const style = document.createElement('style');
-    style.id = 'friend-profile-styles';
-    style.textContent = `
-        /* صفحة الصديق الرئيسية */
-        .friend-profile-page {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            background: white !important;
-            z-index: 10000 !important;
-            overflow-y: auto !important;
-            display: none !important;
-        }
-        
-        .friend-profile-page.active {
-            display: block !important;
-        }
-        
-        /* حاوية الصفحة */
-        .friend-profile-container {
-            max-width: 1200px !important;
-            margin: 0 auto !important;
-            padding: 0 !important;
-            min-height: 100vh !important;
-            background: white !important;
-        }
-        
-        /* الغلاف */
-        .friend-cover-photo {
-            width: 100% !important;
-            height: 350px !important;
-            background-size: cover !important;
-            background-position: center !important;
-            background-repeat: no-repeat !important;
-            position: relative !important;
-        }
-        
-        /* زر الرجوع */
-        .back-button {
-            position: absolute !important;
-            top: 20px !important;
-            right: 20px !important;
-            background: white !important;
-            border: none !important;
-            padding: 12px 24px !important;
-            border-radius: 24px !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-            cursor: pointer !important;
-            font-weight: 600 !important;
-            font-size: 14px !important;
-            color: #1c1e21 !important;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.1) !important;
-            z-index: 100 !important;
-            transition: all 0.3s !important;
-        }
-        
-        .back-button:hover {
-            background: #f0f2f5 !important;
-            transform: translateX(-5px) !important;
-        }
-        
-        /* قسم المعلومات الشخصية */
-        .friend-profile-info-section {
-            display: flex !important;
-            align-items: flex-end !important;
-            padding: 0 40px !important;
-            margin-top: -80px !important;
-            gap: 30px !important;
-            flex-wrap: wrap !important;
-            position: relative !important;
-            z-index: 10 !important;
-        }
-        
-        /* الصورة الشخصية */
-        .friend-profile-avatar {
-            width: 168px !important;
-            height: 168px !important;
-            border-radius: 50% !important;
-            border: 5px solid white !important;
-            overflow: hidden !important;
-            box-shadow: 0 5px 25px rgba(0,0,0,0.2) !important;
-            position: relative !important;
-            background: #f0f2f5 !important;
-            flex-shrink: 0 !important;
-        }
-        
-        .friend-profile-avatar img {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover !important;
-            display: block !important;
-        }
-        
-        /* التفاصيل */
-        .friend-profile-details {
-            flex: 1 !important;
-            padding-bottom: 30px !important;
-            min-width: 300px !important;
-        }
-        
-        .friend-profile-name {
-            font-size: 32px !important;
-            font-weight: bold !important;
-            margin: 0 0 10px 0 !important;
-            color: #1c1e21 !important;
-            line-height: 1.2 !important;
-        }
-        
-        .friend-profile-friends {
-            font-size: 16px !important;
-            color: #65676b !important;
-            margin-bottom: 20px !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-        }
-        
-        /* أزرار التحكم */
-        .friend-profile-actions {
-            display: flex !important;
-            gap: 12px !important;
-            margin-top: 20px !important;
-            flex-wrap: wrap !important;
-        }
-        
-        .friend-action-btn {
-            padding: 12px 24px !important;
-            border: none !important;
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            font-size: 14px !important;
-            cursor: pointer !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-            transition: all 0.3s !important;
-            min-width: 120px !important;
-            justify-content: center !important;
-        }
-        
-        .friend-action-btn.primary {
-            background: #1877f2 !important;
-            color: white !important;
-        }
-        
-        .friend-action-btn.warning {
-            background: #f7b731 !important;
-            color: white !important;
-        }
-        
-        .friend-action-btn:hover {
-            opacity: 0.9 !important;
-            transform: translateY(-2px) !important;
-        }
-        
-        /* شريط التنقل */
-        .friend-profile-nav {
-            display: flex !important;
-            background: white !important;
-            border-bottom: 1px solid #e4e6eb !important;
-            padding: 0 40px !important;
-            margin: 20px 0 0 0 !important;
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 100 !important;
-        }
-        
-        .nav-btn {
-            padding: 20px 24px !important;
-            background: none !important;
-            border: none !important;
-            border-bottom: 3px solid transparent !important;
-            cursor: pointer !important;
-            font-size: 15px !important;
-            font-weight: 600 !important;
-            color: #65676b !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 10px !important;
-            transition: all 0.3s !important;
-            white-space: nowrap !important;
-        }
-        
-        .nav-btn.active {
-            color: #1877f2 !important;
-            border-bottom-color: #1877f2 !important;
-        }
-        
-        .nav-btn:hover:not(.active) {
-            background: #f0f2f5 !important;
-            color: #1c1e21 !important;
-        }
-        
-        /* منطقة المحتوى */
-        .friend-profile-content {
-            padding: 20px 40px 40px !important;
-            min-height: 500px !important;
-        }
-        
-        /* التبويبات */
-        .friend-tab {
-            display: none !important;
-            animation: fadeIn 0.3s ease !important;
-        }
-        
-        .friend-tab.active {
-            display: block !important;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        /* التحميل */
-        .friend-loading {
-            text-align: center !important;
-            padding: 80px 20px !important;
-            color: #65676b !important;
-        }
-        
-        .loading-spinner {
-            margin-bottom: 20px !important;
-        }
-        
-        .loading-spinner i {
-            font-size: 48px !important;
-            color: #1877f2 !important;
-        }
-        
-        .friend-loading h3 {
-            font-size: 20px !important;
-            margin: 15px 0 10px !important;
-            color: #1c1e21 !important;
-        }
-        
-        .friend-loading p {
-            font-size: 14px !important;
-        }
-        
-        /* المنشورات */
-        .friend-posts-list {
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 20px !important;
-            max-width: 680px !important;
-            margin: 0 auto !important;
-        }
-        
-        .friend-post-card {
-            background: white !important;
-            border-radius: 12px !important;
-            padding: 20px !important;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08) !important;
-            border: 1px solid #e4e6eb !important;
-            transition: transform 0.3s, box-shadow 0.3s !important;
-        }
-        
-        .friend-post-card:hover {
-            transform: translateY(-2px) !important;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.12) !important;
-        }
-        
-        .friend-post-header {
-            display: flex !important;
-            align-items: center !important;
-            gap: 15px !important;
-            margin-bottom: 15px !important;
-        }
-        
-        .friend-post-avatar {
-            width: 50px !important;
-            height: 50px !important;
-            border-radius: 50% !important;
-            object-fit: cover !important;
-            cursor: pointer !important;
-            border: 2px solid #e4e6eb !important;
-        }
-        
-        .friend-post-user-info {
-            flex: 1 !important;
-        }
-        
-        .friend-post-user-info h4 {
-            margin: 0 !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-            color: #1c1e21 !important;
-            cursor: pointer !important;
-        }
-        
-        .friend-post-user-info h4:hover {
-            text-decoration: underline !important;
-        }
-        
-        .friend-post-time {
-            font-size: 13px !important;
-            color: #65676b !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 6px !important;
-            margin-top: 4px !important;
-        }
-        
-        .privacy-badge {
-            background: #f0f2f5 !important;
-            padding: 2px 8px !important;
-            border-radius: 4px !important;
-            font-size: 12px !important;
-        }
-        
-        .friend-post-content {
-            font-size: 15px !important;
-            line-height: 1.6 !important;
-            color: #1c1e21 !important;
-            margin-bottom: 15px !important;
-            padding-bottom: 15px !important;
-            border-bottom: 1px solid #e4e6eb !important;
-        }
-        
-        .post-link {
-            color: #1877f2 !important;
-            text-decoration: none !important;
-        }
-        
-        .post-link:hover {
-            text-decoration: underline !important;
-        }
-        
-        .hashtag {
-            color: #1877f2 !important;
-            background: #f0f2f5 !important;
-            padding: 2px 6px !important;
-            border-radius: 4px !important;
-            margin: 0 2px !important;
-        }
-        
-        .friend-post-media {
-            margin: 15px 0 !important;
-            border-radius: 10px !important;
-            overflow: hidden !important;
-        }
-        
-        .post-image {
-            width: 100% !important;
-            max-height: 500px !important;
-            object-fit: contain !important;
-            border-radius: 10px !important;
-            cursor: pointer !important;
-            background: #f0f2f5 !important;
-        }
-        
-        .video-container {
-            position: relative !important;
-            padding-bottom: 56.25% !important;
-            height: 0 !important;
-            overflow: hidden !important;
-            border-radius: 10px !important;
-        }
-        
-        .video-container iframe {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            border: 0 !important;
-        }
-        
-        .friend-post-stats {
-            display: flex !important;
-            gap: 20px !important;
-            padding: 15px 0 !important;
-            border-bottom: 1px solid #e4e6eb !important;
-            color: #65676b !important;
-            font-size: 14px !important;
-        }
-        
-        .stat-item {
-            display: flex !important;
-            align-items: center !important;
-            gap: 6px !important;
-            cursor: pointer !important;
-        }
-        
-        .stat-item:hover {
-            color: #1877f2 !important;
-        }
-        
-        .friend-post-actions {
-            display: flex !important;
-            justify-content: space-around !important;
-            padding-top: 15px !important;
-        }
-        
-        .friend-post-action-btn {
-            flex: 1 !important;
-            background: none !important;
-            border: none !important;
-            padding: 10px !important;
-            border-radius: 8px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            gap: 10px !important;
-            cursor: pointer !important;
-            color: #65676b !important;
-            font-weight: 600 !important;
-            font-size: 14px !important;
-            transition: all 0.3s !important;
-        }
-        
-        .friend-post-action-btn:hover {
-            background: #f0f2f5 !important;
-            color: #1c1e21 !important;
-        }
-        
-        .friend-post-action-btn.liked {
-            color: #1877f2 !important;
-        }
-        
-        .friend-post-action-btn.liked:hover {
-            background: #e7f3ff !important;
-        }
-        
-        /* قسم حول */
-        .friend-about-content {
-            background: white !important;
-            border-radius: 12px !important;
-            padding: 30px !important;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08) !important;
-            max-width: 800px !important;
-            margin: 0 auto !important;
-        }
-        
-        .friend-info-item {
-            display: flex !important;
-            align-items: flex-start !important;
-            gap: 20px !important;
-            padding: 20px 0 !important;
-            border-bottom: 1px solid #e4e6eb !important;
-        }
-        
-        .friend-info-item:last-child {
-            border-bottom: none !important;
-        }
-        
-        .friend-info-item i {
-            width: 24px !important;
-            height: 24px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            background: #f0f2f5 !important;
-            border-radius: 50% !important;
-            color: #65676b !important;
-            font-size: 12px !important;
-            flex-shrink: 0 !important;
-        }
-        
-        .friend-info-item div {
-            flex: 1 !important;
-        }
-        
-        .friend-info-item strong {
-            display: block !important;
-            font-size: 14px !important;
-            color: #65676b !important;
-            margin-bottom: 5px !important;
-        }
-        
-        .friend-info-item span {
-            display: block !important;
-            font-size: 16px !important;
-            color: #1c1e21 !important;
-            font-weight: 500 !important;
-        }
-        
-        /* قسم الصور */
-        .friend-photos-grid {
-            display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
-            gap: 15px !important;
-            margin-top: 20px !important;
-        }
-        
-        .friend-photo-item {
-            aspect-ratio: 1 !important;
-            border-radius: 10px !important;
-            overflow: hidden !important;
-            background: #f0f2f5 !important;
-            position: relative !important;
-            cursor: pointer !important;
-            transition: transform 0.3s !important;
-        }
-        
-        .friend-photo-item:hover {
-            transform: scale(1.05) !important;
-        }
-        
-        .friend-photo-item img {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover !important;
-            transition: opacity 0.3s !important;
-        }
-        
-        /* قسم الأصدقاء */
-        .friend-friends-grid {
-            display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
-            gap: 20px !important;
-            margin-top: 20px !important;
-        }
-        
-        .friend-friend-card {
-            background: white !important;
-            border-radius: 12px !important;
-            padding: 25px !important;
-            text-align: center !important;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08) !important;
-            cursor: pointer !important;
-            transition: all 0.3s !important;
-            border: 1px solid #e4e6eb !important;
-        }
-        
-        .friend-friend-card:hover {
-            transform: translateY(-5px) !important;
-            box-shadow: 0 5px 25px rgba(0,0,0,0.15) !important;
-            border-color: #1877f2 !important;
-        }
-        
-        .friend-friend-avatar {
-            width: 80px !important;
-            height: 80px !important;
-            border-radius: 50% !important;
-            margin: 0 auto 15px !important;
-            background: #f0f2f5 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            overflow: hidden !important;
-            border: 3px solid white !important;
-            box-shadow: 0 3px 15px rgba(0,0,0,0.1) !important;
-        }
-        
-        .friend-friend-card h4 {
-            margin: 0 0 8px 0 !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-            color: #1c1e21 !important;
-        }
-        
-        .friend-friend-card p {
-            margin: 0 !important;
-            font-size: 14px !important;
-            color: #65676b !important;
-        }
-        
-        /* زر إعادة المحاولة */
-        .retry-btn {
-            padding: 10px 24px !important;
-            background: #1877f2 !important;
-            color: white !important;
-            border: none !important;
-            border-radius: 8px !important;
-            font-weight: 600 !important;
-            cursor: pointer !important;
-            margin-top: 15px !important;
-            transition: all 0.3s !important;
-        }
-        
-        .retry-btn:hover {
-            background: #166fe5 !important;
-            transform: translateY(-2px) !important;
-        }
-        
-        /* زر تكبير الصورة */
-        .profile-zoom-btn {
-            position: absolute !important;
-            bottom: 15px !important;
-            right: 15px !important;
-            width: 36px !important;
-            height: 36px !important;
-            border-radius: 50% !important;
-            background: rgba(0,0,0,0.6) !important;
-            color: white !important;
-            border: none !important;
-            cursor: pointer !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            opacity: 0 !important;
-            transition: opacity 0.3s !important;
-            z-index: 3 !important;
-        }
-        
-        .friend-profile-avatar:hover .profile-zoom-btn {
-            opacity: 1 !important;
-        }
-        
-        /* رسائل الخطأ */
-        .friend-error, .friend-no-data {
-            text-align: center !important;
-            padding: 60px 20px !important;
-        }
-        
-        .friend-error i {
-            font-size: 48px !important;
-            color: #ff4444 !important;
-            margin-bottom: 20px !important;
-        }
-        
-        .friend-no-data i {
-            font-size: 48px !important;
-            color: #e4e6eb !important;
-            margin-bottom: 20px !important;
-        }
-        
-        .friend-error h3, .friend-no-data h3 {
-            font-size: 20px !important;
-            margin: 15px 0 10px !important;
-            color: #1c1e21 !important;
-        }
-        
-        .friend-error p, .friend-no-data p {
-            font-size: 14px !important;
-            color: #65676b !important;
-            margin-bottom: 20px !important;
-        }
-        
-        /* التجاوب مع الشاشات الصغيرة */
-        @media (max-width: 768px) {
-            .friend-profile-info-section {
-                padding: 0 20px !important;
-                flex-direction: column !important;
-                align-items: center !important;
-                text-align: center !important;
-            }
-            
-            .friend-profile-avatar {
-                width: 120px !important;
-                height: 120px !important;
-            }
-            
-            .friend-profile-nav {
-                padding: 0 20px !important;
-                overflow-x: auto !important;
-            }
-            
-            .friend-profile-content {
-                padding: 20px !important;
-            }
-            
-            .friend-photos-grid {
-                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
-            }
-            
-            .friend-friends-grid {
-                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
-            }
-            
-            .friend-profile-actions {
-                justify-content: center !important;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .friend-cover-photo {
-                height: 250px !important;
-            }
-            
-            .friend-profile-info-section {
-                margin-top: -60px !important;
-            }
-            
-            .friend-profile-name {
-                font-size: 24px !important;
-            }
-        }
-    `;
-    
-    document.head.appendChild(style);
-    console.log('Friend profile styles added');
-}
-
-// تهيئة النظام
-function initializeFriendProfileSystem() {
-    console.log('Initializing friend profile system...');
-    
-    // إضافة CSS
-    addFriendProfileStyles();
-    
-    // إضافة مستمع الأحداث
-    document.addEventListener('click', function(e) {
-        // معالجة نقرات فتح صفحة الصديق
-        if (e.target.closest('[data-friend-id]')) {
-            const friendElement = e.target.closest('[data-friend-id]');
-            const friendId = friendElement.dataset.friendId;
-            if (friendId) {
-                e.preventDefault();
-                viewFriendProfile(friendId);
-            }
-        }
-        
-        // معالجة نقرات الأزرار داخل صفحة الصديق
-        if (e.target.closest('.nav-btn')) {
-            const btn = e.target.closest('.nav-btn');
-            const tab = getTabNameFromButton(btn);
-            if (tab) {
-                e.preventDefault();
-                switchFriendTab(tab);
-            }
-        }
-    });
-    
-    // إضافة مستمع زر الهروب
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && 
-            document.getElementById('friendProfilePage')?.classList.contains('active')) {
-            closeFriendProfile();
-        }
-    });
-    
-    console.log('Friend profile system initialized');
-}
-
-// الحصول على اسم التبويب من الزر
-function getTabNameFromButton(button) {
-    const span = button.querySelector('span');
-    if (span) {
-        const text = span.textContent.trim();
-        const arabicToEnglish = {
-            'المنشورات': 'posts',
-            'حول': 'about',
-            'الصور': 'photos',
-            'الأصدقاء': 'friends'
-        };
-        return arabicToEnglish[text] || text.toLowerCase();
-    }
-    return '';
-}
-
-// تشغيل التهيئة
-document.addEventListener('DOMContentLoaded', initializeFriendProfileSystem);
-// التأكد من استدعاء الدالة لملفك الشخصي تلقائياً عند فتح التطبيق
-firebase.auth().onAuthStateChanged((user) => {
-    if (user) {
-        // استدعاء بدون UID لتحديث 'mainProfileFriends'
-        window.updateFriendsCount(); 
-    }
-});
-//=================reset-password============
+//=================نهاية قسم صفحة الصديق============
 // ========== نظام إعادة تعيين كلمة المرور ==========
 
 // دالة فتح نافذة نسيت كلمة المرور
