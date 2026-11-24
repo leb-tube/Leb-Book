@@ -12122,51 +12122,6 @@ window.updateFriendsCount = async function(targetUid = null) {
         console.error('❌ خطأ في تحديث العداد:', error.message);
     }
 };
-
-
-// 11. تحديث عداد الأصدقاء
-// 11. تحديث عداد الأصدقاء مع استبعاد حساب المستخدم نفسه
-window.updateFriendsCount = async function(targetUid = null) {
-    try {
-        const currentUser = firebase.auth().currentUser;
-        const uid = targetUid || (currentUser ? currentUser.uid : null);
-        if (!uid) return;
-
-        const snapshot = await db.collection('users').doc(uid).collection('friends').get();
-        
-        // استبعاد معرف المستخدم نفسه إذا كان موجوداً بالخطأ في المجموعة
-        let count = 0;
-        snapshot.forEach(doc => {
-            if (doc.id === uid) {
-                // حذف السجل الخاطئ تلقائياً من قاعدة البيانات
-                doc.ref.delete().catch(() => {});
-            } else {
-                count++;
-            }
-        });
-
-        if (targetUid) {
-            const friendEl = document.getElementById('friendProfileFriends');
-            if (friendEl) friendEl.innerText = `${count} أصدقاء`;
-        } else {
-            const mainEl = document.getElementById('mainProfileFriends');
-            if (mainEl) mainEl.innerText = `${count} أصدقاء`;
-
-            const tabBadge = document.getElementById('friendsCount');
-            if (tabBadge) tabBadge.innerText = count > 0 ? count : '0';
-
-            document.querySelectorAll('.friends-count, #profileFriendsCount').forEach(el => {
-                el.innerText = count;
-            });
-
-            db.collection('users').doc(uid).update({ friendsCount: count }).catch(() => {});
-        }
-    } catch (error) {
-        console.error('❌ خطأ في تحديث العداد:', error.message);
-    }
-};
-
-
  </script>
  
 
