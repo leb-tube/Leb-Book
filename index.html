@@ -10617,39 +10617,66 @@ window.switchFriendTab = function(tabName) {
 };
 
 // 8. تحميل منشورات الصديق مع مشغل الفيديو الموحد
-async function loadFriendPhotosList(friendId) {
-    const grid = document.getElementById('friendPhotosGrid');
-    if (!grid) return;
+async function loadFriendPosts(friendId) {
+    const container = document.getElementById('friendPostsContainer');
+    if (!container) return;
 
-    grid.innerHTML = '<div style="text-align:center; padding:20px; color:#65676b;">جاري تحميل الصور...</div>';
+    container.innerHTML = '<div class="loading" style="text-align:center; padding:30px; color:#65676b;"><i class="fas fa-spinner fa-spin"></i> جاري تحميل المنشورات...</div>';
+
     try {
-        const snap = await db.collection('posts').where('userId', '==', friendId).get();
-        let photosHTML = '';
-        snap.forEach(doc => {
-            const p = doc.data();
-            if (p.imageUrl && (p.privacy === 'public' || p.privacy === 'friends' || !p.privacy)) {
-                photosHTML += `
-                    <div style="border-radius: 8px; overflow: hidden; aspect-ratio: 1/1; background: #eee;">
-                        <img src="${p.imageUrl}" onclick="window.open('${p.imageUrl}', '_blank')" 
-                             style="width: 100%; height: 100%; object-fit: cover; cursor: pointer;">
-                    </div>
-                `;
+        let snapshot = await db.collection('posts')
+            .where('userId', '==', friendId)
+            .get();
+
+        if (snapshot.empty) {
+            snapshot = await db.collection('posts')
+                .where('authorId', '==', friendId)
+                .get();
+        }
+
+        if (snapshot.empty) {
+            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات لهذا المستخدم</div>';
+            return;
+        }
+
+        let posts = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const privacy = data.privacy || 'public';
+            if (privacy === 'public' || privacy === 'friends') {
+                posts.push({ id: doc.id, ...data });
             }
         });
-        grid.innerHTML = photosHTML || '<div style="text-align:center; padding:30px; color:#65676b; grid-column: 1/-1;">لا توجد صور منشورة</div>';
-    } catch (e) {
-        console.error('❌ خطأ في تحميل صور الصديق:', e);
-        grid.innerHTML = '<div style="text-align:center; padding:20px; color:#e41e3f;">تعذر تحميل الصور</div>';
+
+        if (posts.length === 0) {
+            container.innerHTML = '<div class="no-posts" style="text-align:center; padding:40px; color:#65676b;">لا توجد منشورات عامة لعرضها</div>';
+            return;
+        }
+
+        posts.sort((a, b) => {
+            const timeA = a.timestamp && a.timestamp.toMillis ? a.timestamp.toMillis() : new Date(a.timestamp || 0).getTime();
+            const timeB = b.timestamp && b.timestamp.toMillis ? b.timestamp.toMillis() : new Date(b.timestamp || 0).getTime();
+            return timeB - timeA;
+        });
+
+        container.innerHTML = posts.map(post => createFriendPostHTML(post)).join('');
+
+    } catch (error) {
+        console.error('❌ خطأ في تحميل منشورات الصديق:', error);
+        container.innerHTML = `
+            <div class="error-state" style="text-align:center; padding:30px; color:#e41e3f;">
+                <p>حدث خطأ أثناء تحميل المنشورات</p>
+                <small>${error.message}</small>
+            </div>
+        `;
     }
 }
-
 // دالة بناء بطاقة منشور الصديق (تدعم النصوص، الصور، والفيديوهات الموحدة)
 function createFriendPostHTML(post) {
     const authorName = post.authorName || post.userName || (currentFriendData && currentFriendData.name) || 'مستخدم';
     const authorPhoto = post.authorPhoto || post.userPhoto || (currentFriendData && currentFriendData.profilePicture) || '';
     const initial = authorName.charAt(0).toUpperCase();
 
-    // تنسيق التاريخ
     let dateStr = 'الآن';
     if (post.timestamp) {
         const dateObj = post.timestamp.toDate ? post.timestamp.toDate() : new Date(post.timestamp);
@@ -10664,12 +10691,10 @@ function createFriendPostHTML(post) {
         }
     }
 
-    // تنسيق النص الآمن
     const safeText = typeof formatUnifiedPostText === 'function'
         ? formatUnifiedPostText(post.content || post.text || '')
         : (post.content || post.text || '');
 
-    // عرض الصورة إن وجدت
     const imageHTML = post.imageUrl
         ? `<div style="margin-top: 12px;">
                <img src="${post.imageUrl}" alt="صورة المنشور" onclick="window.open('${post.imageUrl}', '_blank')"
@@ -10677,23 +10702,23 @@ function createFriendPostHTML(post) {
            </div>`
         : '';
 
-    // عرض الفيديو بنظام .yt-box الموحد إن وجد
     let videoHTML = '';
-    if (post.video) {
-        if (post.video.type === 'youtube' && post.video.id) {
+    const videoObj = post.video || post.videoData;
+    if (videoObj) {
+        if (videoObj.type === 'youtube' && videoObj.id) {
             videoHTML = `
-                <div class="yt-box" data-id="${post.video.id}" onclick="startYouTubeVideo(this)"
-                     style="margin: 12px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; background-color: #18191a; background-image: url('https://ytimg.com{post.video.id}/hqdefault.jpg'), url('https://ytimg.com{post.video.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                <div class="yt-box" data-id="${videoObj.id}" onclick="startYouTubeVideo(this)"
+                     style="margin: 12px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; background-color: #18191a; background-image: url('https://ytimg.com{videoObj.id}/hqdefault.jpg'), url('https://ytimg.com{videoObj.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
                     <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 42px; background: #ff0000; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
                         <i class="fas fa-play" style="color: white; font-size: 18px; margin-left: 3px;"></i>
                     </div>
                 </div>
             `;
-        } else if (post.video.type === 'direct' && post.video.url) {
+        } else if (videoObj.type === 'direct' && videoObj.url) {
             videoHTML = `
                 <div style="margin: 12px 0;">
                     <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 10px; background: #000;">
-                        <source src="${post.video.url}" type="video/mp4">
+                        <source src="${videoObj.url}" type="video/mp4">
                     </video>
                 </div>
             `;
@@ -10719,15 +10744,13 @@ function createFriendPostHTML(post) {
         </div>
     `;
 }
-
-function formatUnifiedPostText(text) {
+    function formatUnifiedPostText(text) {
     if (!text) return '';
     let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     safe = safe.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1877f2;">$1</a>');
     safe = safe.replace(/#([؀-ۿ\w]+)/g, '<span style="color:#1877f2; font-weight:600;">#$1</span>');
     return safe.split('\r\n').join('<br>').split('\n').join('<br>');
 }
-
 
 // 9. تحميل معلومات "حول" الصديق
 function loadFriendAbout(data) {
@@ -10745,10 +10768,39 @@ function loadFriendAbout(data) {
         </div>
     `;
 }
-
 // 10. تحميل أصدقاء الصديق
 async function loadFriendFriendsList(friendId) {
+    const grid = document.getElementById('friendFriendsGrid');
+    if (!grid) return;
 
+    grid.innerHTML = '<div style="text-align:center; padding:20px; color:#65676b; grid-column: 1/-1;">جاري تحميل الأصدقاء...</div>';
+    try {
+        const snap = await db.collection('users').doc(friendId).collection('friends').get();
+        if (snap.empty) {
+            grid.innerHTML = '<div style="text-align:center; padding:30px; color:#65676b; grid-column: 1/-1;">لا يوجد أصدقاء لعرضهم</div>';
+            return;
+        }
+        const docs = await Promise.all(snap.docs.map(d => db.collection('users').doc(d.id).get()));
+        let html = '';
+        docs.forEach(uDoc => {
+            if (uDoc.exists && uDoc.id !== friendId) {
+                const u = uDoc.data();
+                const fallback = typeof generateAvatarSVG === 'function' ? generateAvatarSVG(u.name, 60) : '';
+                html += `
+                    <div class="fp-mini-card" onclick="window.viewFriendProfile('${uDoc.id}')">
+                        <img src="${u.profilePicture || fallback}" alt="${u.name || ''}" onerror="this.onerror=null; this.src='${fallback}';">
+                        <h4 style="margin:0; font-size:14px;">${u.name || 'مستخدم'}</h4>
+                        <p style="margin:4px 0 0; font-size:12px; color:#65676b;">${u.job || ''}</p>
+                    </div>
+                `;
+            }
+        });
+        grid.innerHTML = html || '<div style="text-align:center; padding:30px; color:#65676b; grid-column: 1/-1;">لا يوجد أصدقاء لعرضهم</div>';
+    } catch (e) {
+        console.error('❌ خطأ في تحميل أصدقاء الصديق:', e);
+        grid.innerHTML = '<div style="text-align:center; padding:20px; color:#e41e3f; grid-column: 1/-1;">تعذر تحميل القائمة</div>';
+    }
+}
 // 11. تحميل صور الصديق
 async function loadFriendPhotosList(friendId) {
     const grid = document.getElementById('friendPhotosGrid');
