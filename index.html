@@ -11448,48 +11448,50 @@ window.renderWebsiteCardHTML = function(data) {
         </a>
     `;
 };
-    // دالة حذف المنشور الموحدة (تدعم الحذف المتتالي الفوري بدون تحديث الصفحة)
-window.deletePost = async function(postId) {
-    if (!postId) return;
-    if (!confirm('هل أنت متأكد من حذف هذا المنشور نهائياً؟')) return;
+ // مراقب تلقائي للروابط داخل صناديق كتابة المنشورات (الرئيسية والعامة)
+window.autoDetectedLinkData = { main: null, public: null };
 
-    try {
-        // 1. حذف المنشور من قاعدة بيانات Firestore
-        await db.collection('posts').doc(postId).delete();
+function setupAutoLinkDetector(textareaId, previewBoxId, key) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea || textarea.dataset.linkBound) return;
+    textarea.dataset.linkBound = 'true';
 
-        // 2. إزالة بطاقة المنشور من الواجهة فوراً (في الصفحة الرئيسية والعامة وأي مكان آخر)
-        const selectors = [
-            `[data-post-id="${postId}"]`,
-            `#post-${postId}`,
-            `#public-post-${postId}`
-        ];
+    let debounceTimer = null;
+    textarea.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+            const text = textarea.value || '';
+            // البحث عن أي رابط في النص (باستثناء روابط يوتيوب لأن لها مشغلها الخاص)
+            const match = text.match(/(https?:\/\/[^\s]+)/);
+            let previewBox = document.getElementById(previewBoxId);
 
-        selectors.forEach(sel => {
-            document.querySelectorAll(sel).forEach(card => {
-                card.style.transition = 'all 0.3s ease';
-                card.style.opacity = '0';
-                card.style.transform = 'scale(0.95)';
-                setTimeout(() => card.remove(), 300);
-            });
-        });
+            if (!match || match.includes('youtube.com') || match.includes('youtu.be')) {
+                window.autoDetectedLinkData[key] = null;
+                if (previewBox) previewBox.innerHTML = '';
+                return;
+            }
 
-        // 3. إغلاق أي قائمة خيارات مفتوحة
-        document.querySelectorAll('.post-options-menu, .public-post-menu').forEach(menu => {
-            menu.style.display = 'none';
-            menu.classList.remove('show', 'active');
-        });
+            const url = match;
+            if (!previewBox) {
+                previewBox = document.createElement('div');
+                previewBox.id = previewBoxId;
+                textarea.insertAdjacentElement('afterend', previewBox);
+            }
 
-        if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
-            window.authSystem.showMessage('تم حذف المنشور بنجاح', 'success');
-        }
-    } catch (error) {
-        console.error('❌ خطأ في حذف المنشور:', error);
-        alert('حدث خطأ أثناء حذف المنشور: ' + error.message);
-    }
-};
+            previewBox.innerHTML = '<div style="padding:8px; font-size:13px; color:#65676b;"><i class="fas fa-spinner fa-spin"></i> جاري جلب بطاقة الموقع...</div>';
+            const siteData = await window.fetchWebsitePreview(url);
+            window.autoDetectedLinkData[key] = siteData;
+            previewBox.innerHTML = window.renderWebsiteCardHTML(siteData);
+        }, 700);
+    });
+}
 
-// ربط اسم دالة الحذف في الصفحة العامة بنفس الدالة الموحدة
-window.deletePublicPost = window.deletePost;
+// تفعيل المراقب على صندوقي النشر
+setInterval(() => {
+    setupAutoLinkDetector('postContent', 'mainAutoLinkPreview', 'main');
+    setupAutoLinkDetector('publicPostContent', 'publicAutoLinkPreview', 'public');
+}, 1500);
+
 
  </script>
  
