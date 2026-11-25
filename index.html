@@ -11016,9 +11016,21 @@ window.renderPostCommentsSection = function(post, postId) {
         `;
     }).join('');
 
+    // زر إظهار/إخفاء التعليقات (يظهر فقط إذا كان هناك تعليق واحد على الأقل)
+    const toggleBtnHTML = comments.length > 0
+        ? `<button type="button" class="toggle-comments-btn" data-toggle-comments="${postId}" onclick="window.toggleCommentsVisibility('${postId}')"
+                   style="background:none; border:none; color:#65676b; font-size:13px; font-weight:600; cursor:pointer; padding:4px 0 8px; display:flex; align-items:center; gap:6px;">
+               <i class="fas fa-comments"></i> <span>إظهار الكل (${comments.length})</span>
+           </button>`
+        : `<button type="button" class="toggle-comments-btn" data-toggle-comments="${postId}" onclick="window.toggleCommentsVisibility('${postId}')"
+                   style="display:none; background:none; border:none; color:#65676b; font-size:13px; font-weight:600; cursor:pointer; padding:4px 0 8px; align-items:center; gap:6px;">
+               <i class="fas fa-comments"></i> <span>إخفاء التعليقات</span>
+           </button>`;
+
     return `
-        <div class="unified-comments-wrapper" id="comments-wrapper-${postId}" style="margin-top:12px; padding-top:12px; border-top:1px solid #e4e6eb;">
-            <div class="unified-comments-list" id="comments-list-${postId}" style="max-height:260px; overflow-y:auto; margin-bottom:10px;">
+        <div class="unified-comments-wrapper" id="comments-wrapper-${postId}" style="margin-top:10px; padding-top:10px; border-top:1px solid #e4e6eb;">
+            ${toggleBtnHTML}
+            <div class="unified-comments-list" id="comments-list-${postId}" data-open="false" style="display:none; max-height:260px; overflow-y:auto; margin-bottom:10px;">
                 ${commentsListHTML}
             </div>
             <div style="display:flex; gap:8px; align-items:center;">
@@ -11033,7 +11045,27 @@ window.renderPostCommentsSection = function(post, postId) {
         </div>
     `;
 };
+// 2. دالة التبديل بين إظهار وإخفاء التعليقات
+window.toggleCommentsVisibility = function(postId, forceOpen = false) {
+    document.querySelectorAll(`#comments-list-${postId}`).forEach(list => {
+        const isCurrentlyOpen = list.getAttribute('data-open') === 'true';
+        const shouldOpen = forceOpen ? true : !isCurrentlyOpen;
 
+        list.style.display = shouldOpen ? 'block' : 'none';
+        list.setAttribute('data-open', shouldOpen ? 'true' : 'false');
+
+        const count = list.querySelectorAll('.unified-comment-item').length;
+        document.querySelectorAll(`[data-toggle-comments="${postId}"]`).forEach(btn => {
+            if (count > 0) {
+                btn.style.display = 'flex';
+                const span = btn.querySelector('span');
+                if (span) {
+                    span.textContent = shouldOpen ? 'إخفاء التعليقات' : `إظهار الكل (${count})`;
+                }
+            }
+        });
+    });
+};
 window.submitUnifiedComment = async function(postId) {
     const currentUser = firebase.auth().currentUser;
     if (!currentUser) {
@@ -11092,6 +11124,9 @@ window.submitUnifiedComment = async function(postId) {
             list.insertAdjacentHTML('beforeend', itemHTML);
             list.scrollTop = list.scrollHeight;
         });
+
+        // إظهار قائمة التعليقات تلقائياً وتحديث نص الزر
+        window.toggleCommentsVisibility(postId, true);
 
         document.querySelectorAll(`[data-comment-count="${postId}"]`).forEach(badge => {
             const current = parseInt(badge.textContent) || 0;
@@ -11166,6 +11201,7 @@ window.shareUnifiedPost = async function(postId) {
 };
 
 window.focusUnifiedComment = function(postId) {
+    window.toggleCommentsVisibility(postId, true);
     const inputs = document.querySelectorAll(`#comment-input-${postId}`);
     for (const inp of inputs) {
         if (inp.offsetParent !== null) {
@@ -11174,8 +11210,6 @@ window.focusUnifiedComment = function(postId) {
         }
     }
 };
-
-
  </script>
  
 
