@@ -11429,7 +11429,7 @@ window.deletePublicPost = window.executeInstantDelete;
 window.ogCache = window.ogCache || {};
 
 // ---------- 1) جلب بيانات OG ----------
-window.fetchOgFromUrl = async function (rawUrl) {
+ window.fetchOgFromUrl = async function (rawUrl) {
     const url = String(rawUrl || '').trim();
     if (!url || !/^https?:\/\//i.test(url)) return null;
     if (window.ogCache[url]) return window.ogCache[url];
@@ -11439,43 +11439,46 @@ window.fetchOgFromUrl = async function (rawUrl) {
 
     const resultData = { url, domain, title: domain, description: '', image: '' };
 
-    // المحاولة 1: Microlink بدون مفتاح (5 طلبات/يوم)
-// المحاولة 1: Microlink بدون مفتاح
-let json = null;
-try {
-    const res1 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
-    json = await res1.json();
-} catch (e) { console.warn('Microlink (no key) fail:', e); }
+    let json = null;
 
-// هل لدينا صورة فعلية؟
-const hasImage = json && json.status === 'success' && json.data && json.data.image &&
-    (typeof json.data.image === 'string' || json.data.image.url);
+    // المحاولة 1: بدون مفتاح
+    try {
+        const res1 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
+        json = await res1.json();
+    } catch (e) { console.warn('Microlink (no key) fail:', e); }
 
-// المحاولة 2: Microlink مع مفتاح (إذا لا صورة)
-if (!hasImage) {
-    const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS'; // المفتاح الكامل
-    if (MICROLINK_KEY && MICROLINK_KEY !== 'YOUR_MICROLINK_KEY') {
-        try {
-            const res2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`, {
-                headers: { 'x-api-key': MICROLINK_KEY }
-            });
-            const json2 = await res2.json();
-            if (json2 && json2.status === 'success') json = json2;
-        } catch (e) { console.warn('Microlink (with key) fail:', e); }
+    // هل لدينا صورة فعلية؟
+    const hasImage = json && json.status === 'success' && json.data && json.data.image &&
+        (typeof json.data.image === 'string' ? json.data.image : json.data.image.url);
+
+    // المحاولة 2: مع مفتاح (فقط إذا لا صورة)
+    if (!hasImage) {
+        const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS'; 
+        if (MICROLINK_KEY && MICROLINK_KEY !== 'YOUR_MICROLINK_KEY') {
+            try {
+                const res2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`, {
+                    headers: { 'x-api-key': MICROLINK_KEY }
+                });
+                const json2 = await res2.json();
+                // ✅ لا تستبدل إلا إذا الجديد يحتوي صورة فعلية
+                if (json2 && json2.status === 'success' && json2.data && json2.data.image) {
+                    json = json2;
+                }
+            } catch (e) { console.warn('Microlink (with key) fail:', e); }
+        }
     }
-}
 
-// استخراج البيانات
-if (json && json.status === 'success' && json.data) {
-    resultData.title = json.data.title || domain;
-    resultData.description = json.data.description || '';
-    const img = json.data.image;
-    resultData.image =
-        (img && (img.url || (typeof img === 'string' ? img : ''))) ||
-        (json.data.logo && json.data.logo.url) ||
-        '';
-}
-     // ✅ إغلاق الدالة (كان مفقوداً)
+    // استخراج البيانات
+    if (json && json.status === 'success' && json.data) {
+        resultData.title = json.data.title || domain;
+        resultData.description = json.data.description || '';
+        const img = json.data.image;
+        resultData.image =
+            (img && (img.url || (typeof img === 'string' ? img : ''))) ||
+            (json.data.logo && json.data.logo.url) ||
+            '';
+    }
+
     window.ogCache[url] = resultData;
     return resultData;
 };
