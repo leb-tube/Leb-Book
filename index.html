@@ -11501,14 +11501,22 @@ window.buildOgContainerHTML = function (data) {
             encodeURIComponent(String(data.image).replace(/^https?:\/\//, ''));
 
         // لا onerror هنا إطلاقاً — نضع الروابط في data-attributes فقط
-        imageBlock = `
-            <div class="og-img-holder" style="width:100%;max-height:240px;overflow:hidden;background:#f0f2f5;">
-                <img class="og-thumb" src="${esc(data.image)}" alt=""
-                     referrerpolicy="no-referrer" loading="lazy"
-                     data-proxy="${esc(proxied)}"
-                     style="width:100%;height:100%;min-height:140px;object-fit:cover;display:block;">
-            </div>`;
-    }
+        let imageBlock = '';
+if (data.image) {
+    const proxied = 'https://images.weserv.nl/?url=' +
+        encodeURIComponent(String(data.image).replace(/^https?:\/\//, ''));
+
+    imageBlock = `
+        <div class="og-img-holder"
+             style="width:100%; height:200px; overflow:hidden; background:#f0f2f5;
+                    display:flex; align-items:center; justify-content:center;">
+            <img class="og-thumb" src="${esc(data.image)}" alt=""
+                 referrerpolicy="no-referrer" loading="lazy"
+                 data-proxy="${esc(proxied)}"
+                 style="max-width:100%; max-height:100%; width:auto; height:auto;
+                        object-fit:contain; display:block; margin:0 auto;">
+        </div>`;
+}
 
     return `
         <a href="${esc(data.url)}" target="_blank" rel="noopener noreferrer"
