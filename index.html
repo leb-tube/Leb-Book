@@ -6767,25 +6767,24 @@ stopAllMedia() {
         }
         return '';
     }
-createVideoEmbed(videoData) {
-   if (videoData.type === 'youtube') {
-    return `
-        <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
-             style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a;
-                    background-image: url('https://i.ytimg.com/vi/${videoData.id}/hqdefault.jpg'), url('https://i.ytimg.com/vi/${videoData.id}/mqdefault.jpg');
-                    background-size: cover; background-position: center; cursor: pointer;">
-            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
-                <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
-            </div>
-        </div>
-        <p style="text-align: center; margin-top: 8px; color: #65676b;">
-            <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
-                <i class="fab fa-youtube"></i> مشاهدة على YouTube
-            </a>
-        </p>
-    `;
-   }
-   } else if (videoData.type === 'direct') {
+    createVideoEmbed(videoData) {
+        if (!videoData) return '';
+
+        if (videoData.type === 'youtube' && videoData.id) {
+            return `
+                <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
+                     style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://ytimg.com{videoData.id}/hqdefault.jpg'), url('https://ytimg.com{videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+                        <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
+                    </div>
+                </div>
+                <p style="text-align: center; margin-top: 8px; color: #65676b;">
+                    <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
+                        <i class="fab fa-youtube"></i> مشاهدة على YouTube
+                    </a>
+                </p>
+            `;
+        } else if (videoData.type === 'direct') {
             return `
                 <div style="margin: 15px 0;">
                     <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
@@ -6815,6 +6814,7 @@ createVideoEmbed(videoData) {
             `;
         }
     }
+
 
     createPostMenu(postId) {
         return `
@@ -9122,25 +9122,23 @@ const processedContent = this.processPostContent(post.content);
     return div;
 }
 createVideoEmbedForPublic(videoData) {
-    if (!videoData) return '';
+   if (!videoData) return '';
 
-    if (videoData.type === 'youtube' && videoData.id) {
-        return `
-            <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
-                 style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a;
-                        background-image: url('https://i.ytimg.com/vi/${videoData.id}/hqdefault.jpg'), url('https://i.ytimg.com/vi/${videoData.id}/mqdefault.jpg');
-                        background-size: cover; background-position: center; cursor: pointer;">
-                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
-                    <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
+        if (videoData.type === 'youtube' && videoData.id) {
+            return `
+                <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
+                     style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://ytimg.com{videoData.id}/hqdefault.jpg'), url('https://ytimg.com{videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+                        <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
+                    </div>
                 </div>
-            </div>
-            <p style="text-align: center; margin-top: 8px; color: #65676b;">
-                <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
-                    <i class="fab fa-youtube"></i> مشاهدة على YouTube
-                </a>
-            </p>
-        `;
-       } else if (videoData.type === 'direct') {
+                <p style="text-align: center; margin-top: 8px; color: #65676b;">
+                    <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
+                        <i class="fab fa-youtube"></i> مشاهدة على YouTube
+                    </a>
+                </p>
+            `;
+        } else if (videoData.type === 'direct') {
             return `
                 <div style="margin: 15px 0;">
                     <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
