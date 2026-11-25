@@ -11440,15 +11440,20 @@ window.fetchOgFromUrl = async function (rawUrl) {
     const resultData = { url, domain, title: domain, description: '', image: '' };
 
     // المحاولة 1: Microlink بدون مفتاح (5 طلبات/يوم)
+// المحاولة 1: Microlink بدون مفتاح
 let json = null;
 try {
     const res1 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
     json = await res1.json();
 } catch (e) { console.warn('Microlink (no key) fail:', e); }
 
-// المحاولة 2: Microlink مع مفتاح (إذا فشلت الأولى أو لم تُرجع صورة)
-if (!json || json.status !== 'success' || !json.data || !json.data.image) {
-    const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS'; // ضع مفتاحك هنا
+// هل لدينا صورة فعلية؟
+const hasImage = json && json.status === 'success' && json.data && json.data.image &&
+    (typeof json.data.image === 'string' || json.data.image.url);
+
+// المحاولة 2: Microlink مع مفتاح (إذا لا صورة)
+if (!hasImage) {
+    const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS'; // المفتاح الكامل
     if (MICROLINK_KEY && MICROLINK_KEY !== 'YOUR_MICROLINK_KEY') {
         try {
             const res2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`, {
@@ -11460,7 +11465,7 @@ if (!json || json.status !== 'success' || !json.data || !json.data.image) {
     }
 }
 
-// استخراج البيانات من Microlink (سواء من المحاولة 1 أو 2)
+// استخراج البيانات
 if (json && json.status === 'success' && json.data) {
     resultData.title = json.data.title || domain;
     resultData.description = json.data.description || '';
@@ -11470,36 +11475,6 @@ if (json && json.status === 'success' && json.data) {
         (json.data.logo && json.data.logo.url) ||
         '';
 }
-
-// المحاولة 3: AllOrigins (fallback نهائي)
-if (!resultData.image) {
-    try {
-        const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
-        const proxyJson = await proxyRes.json();
-        if (proxyJson && proxyJson.contents) {
-            const doc = new DOMParser().parseFromString(proxyJson.contents, 'text/html');
-            const ogImg   = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"], meta[property="og:image:secure_url"]');
-            const ogTitle = doc.querySelector('meta[property="og:title"], meta[name="twitter:title"], title');
-            const ogDesc  = doc.querySelector('meta[property="og:description"], meta[name="description"], meta[name="twitter:description"]');
-
-            if (ogImg && ogImg.getAttribute('content')) {
-                try {
-                    resultData.image = new URL(ogImg.getAttribute('content'), url).href;
-                } catch (_) {
-                    resultData.image = ogImg.getAttribute('content');
-                }
-            }
-            if (ogTitle) {
-                const t = ogTitle.getAttribute('content') || ogTitle.textContent;
-                if (t && t.trim()) resultData.title = t.trim();
-            }
-            if (ogDesc && ogDesc.getAttribute('content')) {
-                resultData.description = ogDesc.getAttribute('content').trim();
-            }
-        }
-    } catch (e) { console.warn('AllOrigins fail:', e); }
-}
-
 // ---------- 2) بناء HTML البطاقة ----------
 window.buildOgContainerHTML = function (data) {
     if (!data) return '';
