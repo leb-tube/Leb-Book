@@ -11448,7 +11448,49 @@ window.renderWebsiteCardHTML = function(data) {
         </a>
     `;
 };
-    
+    // دالة حذف المنشور الموحدة (تدعم الحذف المتتالي الفوري بدون تحديث الصفحة)
+window.deletePost = async function(postId) {
+    if (!postId) return;
+    if (!confirm('هل أنت متأكد من حذف هذا المنشور نهائياً؟')) return;
+
+    try {
+        // 1. حذف المنشور من قاعدة بيانات Firestore
+        await db.collection('posts').doc(postId).delete();
+
+        // 2. إزالة بطاقة المنشور من الواجهة فوراً (في الصفحة الرئيسية والعامة وأي مكان آخر)
+        const selectors = [
+            `[data-post-id="${postId}"]`,
+            `#post-${postId}`,
+            `#public-post-${postId}`
+        ];
+
+        selectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(card => {
+                card.style.transition = 'all 0.3s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.95)';
+                setTimeout(() => card.remove(), 300);
+            });
+        });
+
+        // 3. إغلاق أي قائمة خيارات مفتوحة
+        document.querySelectorAll('.post-options-menu, .public-post-menu').forEach(menu => {
+            menu.style.display = 'none';
+            menu.classList.remove('show', 'active');
+        });
+
+        if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
+            window.authSystem.showMessage('تم حذف المنشور بنجاح', 'success');
+        }
+    } catch (error) {
+        console.error('❌ خطأ في حذف المنشور:', error);
+        alert('حدث خطأ أثناء حذف المنشور: ' + error.message);
+    }
+};
+
+// ربط اسم دالة الحذف في الصفحة العامة بنفس الدالة الموحدة
+window.deletePublicPost = window.deletePost;
+
  </script>
  
 
