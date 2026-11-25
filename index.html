@@ -11423,14 +11423,15 @@ window.confirmDeletePublicPost = window.executeInstantDelete;
 window.deletePost = window.executeInstantDelete;
 window.deletePublicPost = window.executeInstantDelete;
 // ============================================================
-// نظام جلب معاينة المواقع (Fetch OG Image & Metadata) المطور
+// نظام جلب معاينة المواقع (Fetch OG) المصحح + تعطيل المعاينة المكسورة القديمة
 // ============================================================
 
 window.ogCache = window.ogCache || {};
 
-// 1. دالة Fetch لجلب og:image و og:title مباشرة من الصفحة
+// 1. دالة Fetch نظيفة لاستخراج og:image و og:title من الرابط
 window.fetchOgFromUrl = async function(rawUrl) {
-    const url = String(rawUrl).trim();
+    const url = String(rawUrl || '').trim();
+    if (!url) return null;
     if (window.ogCache[url]) return window.ogCache[url];
 
     let domain = url;
@@ -11445,7 +11446,7 @@ window.fetchOgFromUrl = async function(rawUrl) {
     };
 
     try {
-        // المحاولة الأولى: جلب بيانات Open Graph عبر Microlink
+        // المحاولة 1: Microlink API
         const res = await fetch(`https://microlink.io{encodeURIComponent(url)}`);
         const json = await res.json();
         if (json.status === 'success' && json.data) {
@@ -11455,7 +11456,7 @@ window.fetchOgFromUrl = async function(rawUrl) {
         }
     } catch (e) {}
 
-    // المحاولة الثانية (Fetch مباشر لـ HTML الصفحة واستخراج og:image يدوياً إذا لم تنجح الأولى)
+    // المحاولة 2: Fetch مباشر لصفحة HTML واستخراج وسوم meta
     if (!resultData.image) {
         try {
             const proxyRes = await fetch(`https://allorigins.win{encodeURIComponent(url)}`);
@@ -11467,14 +11468,14 @@ window.fetchOgFromUrl = async function(rawUrl) {
                 const ogDesc = doc.querySelector('meta[property="og:description"], meta[name="description"]');
 
                 if (ogImg && ogImg.getAttribute('content')) {
-                    // تحويل الرابط النسبي للصورة إلى رابط كامل إن لزم الأمر
                     resultData.image = new URL(ogImg.getAttribute('content'), url).href;
                 }
                 if (ogTitle) {
-                    resultData.title = ogTitle.getAttribute('content') || ogTitle.textContent || resultData.title;
+                    const t = ogTitle.getAttribute('content') || ogTitle.textContent;
+                    if (t && t.trim()) resultData.title = t.trim();
                 }
                 if (ogDesc && ogDesc.getAttribute('content')) {
-                    resultData.description = ogDesc.getAttribute('content');
+                    resultData.description = ogDesc.getAttribute('content').trim();
                 }
             }
         } catch (e) {}
@@ -11484,9 +11485,9 @@ window.fetchOgFromUrl = async function(rawUrl) {
     return resultData;
 };
 
-// 2. بناء بطاقة الموقع بدون أي صورة مكسورة أبداً
+// 2. بناء بطاقة الموقع (تُخفي الصورة تماماً إذا لم تتوفر وتعرض أيقونة نظيفة بدلاً من صورة مكسورة)
 window.buildOgContainerHTML = function(data) {
-    // إذا وُجدت صورة og:image نعرضها، وإذا فشلت في التحميل نحذف حاوية الصورة فوراً ونُظهر شريطاً أنيقاً
+    if (!data) return '';
     const imageBlock = data.image
         ? `<div class="og-img-holder" style="width:100%; max-height:240px; overflow:hidden; background:#f0f2f5;">
                <img src="${data.image}" alt="" 
@@ -11513,15 +11514,20 @@ window.buildOgContainerHTML = function(data) {
     `;
 };
 
-// 3. مراقبة مربعات الكتابة (مع إخفاء الحاوية تلقائياً فور إفراغ النص بعد النشر!)
+// 3. مزامنة صندوق الكتابة وتعطيل حاوية المعاينة المكسورة القديمة للروابط العادية
 function syncComposerOg(textareaId, containerId) {
     const textarea = document.getElementById(textareaId);
     const container = document.getElementById(containerId);
     if (!textarea || !container) return;
 
-    const currentText = (textarea.value || '').trim();
+    // إخفاء حاوية المعاينة القديمة إذا كانت تعرض صورة مكسورة لرابط موقع غير يوتيوب
+    const oldVideoPreview = document.getElementById('videoPreviewContainer');
+    if (oldVideoPreview && oldVideoPreview.innerHTML.includes('img') && !oldVideoPreview.innerHTML.includes('youtube') && !oldVideoPreview.innerHTML.includes('video')) {
+        oldVideoPreview.style.display = 'none';
+        oldVideoPreview.innerHTML = '';
+    }
 
-    // ✅ إذا فرغ مربع النص (بعد النشر مثلاً)، أخفِ الحاوية فوراً
+    const currentText = (textarea.value || '').trim();
     if (!currentText) {
         if (container.style.display !== 'none') {
             container.style.display = 'none';
@@ -11531,8 +11537,8 @@ function syncComposerOg(textareaId, containerId) {
         return;
     }
 
-    const match = currentText.match(/(https?:\/\/[^\s]+)/);
-    const url = match ? match : '';
+    const match = currentText.match(/https?:\/\/[^\s]+/);
+    const url = match ? match[0] : '';
 
     if (!url || url.includes('youtube.com') || url.includes('youtu.be')) {
         container.style.display = 'none';
@@ -11541,7 +11547,6 @@ function syncComposerOg(textareaId, containerId) {
         return;
     }
 
-    // لا تعد الجلب إذا كان نفس الرابط معروضاً بالفعل
     if (textarea.dataset.lastOgUrl === url) return;
     textarea.dataset.lastOgUrl = url;
 
@@ -11555,34 +11560,25 @@ function syncComposerOg(textareaId, containerId) {
     });
 }
 
-// 4. فحص المنشورات المنشورة في الصفحة وإضافة بطاقة OG لها تلقائياً
+// 4. التقاط روابط .post-link داخل المنشورات المنشورة وعرض بطاقة Fetch لها
 async function hydratePublishedPostsOg() {
     const cards = document.querySelectorAll('.post-card, .public-post-card');
     for (const card of cards) {
         if (card.dataset.ogDone === 'true') continue;
 
-        // البحث عن أي رابط خارجي داخل نص المنشور (سواء كان وسم <a> أو نصاً عادياً)
         let foundUrl = '';
-        const links = card.querySelectorAll('a[href^="http"]');
-        for (const a of links) {
+        const postLinks = card.querySelectorAll('a.post-link, a[href^="http"]');
+        for (const a of postLinks) {
             const href = a.getAttribute('href') || '';
-            if (!href.includes('youtube.com') && !href.includes('youtu.be') && !a.closest('.unified-comments-wrapper')) {
+            if (href.startsWith('http') && !href.includes('youtube.com') && !href.includes('youtu.be') && !a.closest('.unified-comments-wrapper') && !a.closest('.post-og-container')) {
                 foundUrl = href;
                 break;
-            }
-        }
-
-        if (!foundUrl) {
-            const textMatch = (card.innerText || '').match(/(https?:\/\/[^\s]+)/);
-            if (textMatch && !textMatch.includes('youtube.com') && !textMatch.includes('youtu.be')) {
-                foundUrl = textMatch;
             }
         }
 
         card.dataset.ogDone = 'true';
         if (!foundUrl) continue;
 
-        // وضع البطاقة قبل شريط الأزرار (.post-actions أو .public-post-actions)
         const actionsBar = card.querySelector('.post-actions, .public-post-actions');
         const ogWrapper = document.createElement('div');
         ogWrapper.className = 'post-og-container';
@@ -11595,16 +11591,18 @@ async function hydratePublishedPostsOg() {
         }
 
         const data = await window.fetchOgFromUrl(foundUrl);
-        ogWrapper.innerHTML = window.buildOgContainerHTML(data);
+        if (data) {
+            ogWrapper.innerHTML = window.buildOgContainerHTML(data);
+        }
     }
 }
 
-// تشغيل المزامنة المستمرة كل 800 مللي ثانية
 setInterval(() => {
     syncComposerOg('postContent', 'mainOgPreviewContainer');
     syncComposerOg('publicPostContent', 'publicOgPreviewContainer');
     hydratePublishedPostsOg();
-}, 800);
+}, 700);
+
 
 
  </script>
