@@ -10701,11 +10701,15 @@ window.loadFriendPosts = async function(friendId) {
             return timeB - timeA;
         });
 
-        // بناء بطاقات المنشورات مباشرة بدون الاعتماد على دوال خارجية
+        const currentUid = firebase.auth().currentUser?.uid;
+
         container.innerHTML = posts.map(post => {
             const authorName = post.authorName || post.userName || (currentFriendData && currentFriendData.name) || 'مستخدم';
             const authorPhoto = post.authorPhoto || post.userPhoto || (currentFriendData && currentFriendData.profilePicture) || '';
             const initial = authorName.charAt(0).toUpperCase();
+            
+            // ✅ تعريف المتغير خارج النص البرمجي HTML
+            const hasLiked = Array.isArray(post.likes) && currentUid && post.likes.includes(currentUid);
 
             let dateStr = 'الآن';
             if (post.timestamp) {
@@ -10727,6 +10731,7 @@ window.loadFriendPosts = async function(friendId) {
             let videoHTML = '';
             const vid = post.video || post.videoData;
             if (vid && vid.type === 'youtube' && vid.id) {
+                // ✅ تصحيح رابط الصورة المصغرة ليوتيوب
                 videoHTML = `
                     <div class="yt-box" data-id="${vid.id}" onclick="startYouTubeVideo(this)"
                          style="margin:12px 0; position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:10px; background-color:#18191a; background-image:url('https://ytimg.com{vid.id}/hqdefault.jpg'); background-size:cover; background-position:center; cursor:pointer;">
@@ -10742,6 +10747,11 @@ window.loadFriendPosts = async function(friendId) {
                 ? `<img src="${authorPhoto}" style="width:44px; height:44px; border-radius:50%; object-fit:cover;">`
                 : `<div style="width:44px; height:44px; border-radius:50%; background:#4a6cf7; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:18px;">${initial}</div>`;
 
+            const commentsHTML = typeof window.renderPostCommentsSection === 'function'
+                ? window.renderPostCommentsSection(post, post.id)
+                : '';
+
+            // ✅ وضع الأزرار والتعليقات داخل حاوية .post-card
             return `
                 <div class="post-card" style="background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); border:1px solid #e4e6eb;">
                     <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -10754,25 +10764,23 @@ window.loadFriendPosts = async function(friendId) {
                     ${safeText ? `<div style="font-size:15px; line-height:1.6; color:#050505; word-break:break-word;">${safeText}</div>` : ''}
                     ${imageHTML}
                     ${videoHTML}
-       const hasLiked = Array.isArray(post.likes) && post.likes.includes(firebase.auth().currentUser?.uid);
-
+                    <div style="display:flex; justify-content:space-around; border-top:1px solid #e4e6eb; margin-top:12px; padding-top:8px;">
+                        <button class="action-btn ${hasLiked ? 'liked' : ''}" data-like-btn="${post.id}"
+                                onclick="window.toggleUnifiedLike('${post.id}', this)"
+                                style="flex:1; background:none; border:none; padding:8px; cursor:pointer; font-weight:600; color:${hasLiked ? '#1877f2' : '#65676b'};">
+                            <i class="${hasLiked ? 'fas' : 'far'} fa-thumbs-up"></i> أعجبني (<span data-like-count="${post.id}">${post.likes?.length || 0}</span>)
+                        </button>
+                        <button class="action-btn" onclick="window.focusUnifiedComment('${post.id}')"
+                                style="flex:1; background:none; border:none; padding:8px; cursor:pointer; font-weight:600; color:#65676b;">
+                            <i class="far fa-comment"></i> تعليق (<span data-comment-count="${post.id}">${post.comments?.length || 0}</span>)
+                        </button>
+                        <button class="action-btn" onclick="window.shareUnifiedPost('${post.id}')"
+                                style="flex:1; background:none; border:none; padding:8px; cursor:pointer; font-weight:600; color:#65676b;">
+                            <i class="fas fa-share"></i> مشاركة (<span data-share-count="${post.id}">${post.shares || 0}</span>)
+                        </button>
+                    </div>
+                    ${commentsHTML}
                 </div>
-<div style="display:flex; justify-content:space-around; border-top:1px solid #e4e6eb; margin-top:12px; padding-top:8px;">
-                <button class="action-btn ${hasLiked ? 'liked' : ''}" data-like-btn="${post.id}"
-                        onclick="window.toggleUnifiedLike('${post.id}', this)"
-                        style="flex:1; background:none; border:none; padding:8px; cursor:pointer; font-weight:600; color:${hasLiked ? '#1877f2' : '#65676b'};">
-                    <i class="${hasLiked ? 'fas' : 'far'} fa-thumbs-up"></i> أعجبني (<span data-like-count="${post.id}">${post.likes?.length || 0}</span>)
-                </button>
-                <button class="action-btn" onclick="window.focusUnifiedComment('${post.id}')"
-                        style="flex:1; background:none; border:none; padding:8px; cursor:pointer; font-weight:600; color:#65676b;">
-                    <i class="far fa-comment"></i> تعليق (<span data-comment-count="${post.id}">${post.comments?.length || 0}</span>)
-                </button>
-                <button class="action-btn" onclick="window.shareUnifiedPost('${post.id}')"
-                        style="flex:1; background:none; border:none; padding:8px; cursor:pointer; font-weight:600; color:#65676b;">
-                    <i class="fas fa-share"></i> مشاركة (<span data-share-count="${post.id}">${post.shares || 0}</span>)
-                </button>
-            </div>
-            ${renderPostCommentsSection(post, post.id)}
             `;
         }).join('');
 
@@ -10781,6 +10789,7 @@ window.loadFriendPosts = async function(friendId) {
         container.innerHTML = `<div style="text-align:center; padding:30px; color:#e41e3f;">حدث خطأ أثناء تحميل المنشورات: ${error.message}</div>`;
     }
 };
+
 // 2. تحميل بطاقة التعريف داخل الحاوية الفريدة fpAboutContainer
 window.loadFriendAbout = async function(data, friendId) {
     const container = document.getElementById('fpAboutContainer') || document.getElementById('friendAboutContainer');
