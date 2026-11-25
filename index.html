@@ -9319,7 +9319,7 @@ createVideoEmbedForPublic(videoData) {
         if (input) input.focus();
     }
 
-    previewPublicVideoLink(url) {
+        previewPublicVideoLink(url) {
         const previewArea = document.getElementById('publicVideoPreviewArea');
         if (!previewArea) return;
 
@@ -9330,7 +9330,7 @@ createVideoEmbedForPublic(videoData) {
             return;
         }
 
-        // 1. استخراج معرف فيديو يوتيوب (يدعم الروابط العادية و Shorts و youtu.be)
+        // 1. استخراج معرف فيديو يوتيوب
         const ytMatch = trimmedUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([^&\n?#]+)/);
         if (ytMatch && ytMatch[1]) {
             const videoId = ytMatch[1];
@@ -9356,13 +9356,13 @@ createVideoEmbedForPublic(videoData) {
             return;
         }
 
-        // 3. أي رابط خارجي آخر
-        this.publicVideoLink = { url: trimmedUrl, type: 'link' };
-        previewArea.innerHTML = `
-            <div style="padding: 8px 12px; background: #fff; border-radius: 8px; font-size: 13px; color: #1877f2; word-break: break-all;">
-                <i class="fas fa-link"></i> ${trimmedUrl}
-            </div>
-        `;
+        // 3. رابط موقع خارجي: جلب صورة وعنوان الموقع تلقائياً
+        previewArea.innerHTML = `<div style="padding:10px; text-align:center; color:#65676b; font-size:13px;"><i class="fas fa-spinner fa-spin"></i> جاري جلب معاينة الموقع...</div>`;
+        
+        window.fetchWebsitePreview(trimmedUrl).then(siteData => {
+            this.publicVideoLink = siteData;
+            previewArea.innerHTML = window.renderWebsiteCardHTML(siteData);
+        });
     }
 
     removePublicVideoLink() {
@@ -11448,14 +11448,7 @@ window.renderWebsiteCardHTML = function(data) {
         </a>
     `;
 };
-        // 3. رابط موقع خارجي: جلب صورة وعنوان الموقع تلقائياً
-        previewArea.innerHTML = `<div style="padding:10px; text-align:center; color:#65676b; font-size:13px;"><i class="fas fa-spinner fa-spin"></i> جاري جلب معاينة الموقع...</div>`;
-        
-        window.fetchWebsitePreview(trimmedUrl).then(siteData => {
-            this.publicVideoLink = siteData;
-            previewArea.innerHTML = window.renderWebsiteCardHTML(siteData);
-        });
-
+    
  </script>
  
 
