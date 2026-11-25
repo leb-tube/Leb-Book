@@ -11491,6 +11491,59 @@ setInterval(() => {
     setupAutoLinkDetector('postContent', 'mainAutoLinkPreview', 'main');
     setupAutoLinkDetector('publicPostContent', 'publicAutoLinkPreview', 'public');
 }, 1500);
+// ============================================================
+// إصلاح الحذف المتتالي للمنشورات في الصفحة الرئيسية والعامة
+// ============================================================
+
+window.executeInstantDelete = async function(postId) {
+    if (!postId) return;
+    if (!confirm('هل أنت متأكد من حذف هذا المنشور نهائياً؟')) return;
+
+    try {
+        // 1. إغلاق نافذة التأكيد والقوائم المنسدلة فوراً حتى لا تمنع النقرات التالية
+        const confirmModal = document.getElementById('confirmModal');
+        if (confirmModal) confirmModal.classList.remove('active');
+        document.querySelectorAll('.post-options-menu, .public-post-menu, .dropdown-menu').forEach(m => {
+            m.style.display = 'none';
+            m.classList.remove('show', 'active');
+        });
+
+        // 2. الحذف من المجموعة الرئيسية posts
+        await db.collection('posts').doc(postId).delete();
+
+        // 3. محاولة الحذف من publicPosts إن وُجد (دون إيقاف الكود في حال عدم وجوده)
+        try {
+            const pubSnap = await db.collection('publicPosts')
+                .where('originalPostId', '==', postId)
+                .limit(1)
+                .get();
+            if (!pubSnap.empty) {
+                await pubSnap.docs[0].ref.delete();
+            }
+        } catch (e) {}
+
+        // 4. إزالة بطاقة المنشور من كل الصفحات المفتوحة فوراً
+        document.querySelectorAll(`[data-post-id="${postId}"], #post-${postId}, #public-post-${postId}`).forEach(el => {
+            el.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+            el.style.opacity = '0';
+            el.style.transform = 'scale(0.95)';
+            setTimeout(() => el.remove(), 250);
+        });
+
+        if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
+            window.authSystem.showMessage('تم حذف المنشور بنجاح', 'success');
+        }
+    } catch (error) {
+        console.error('❌ خطأ في حذف المنشور:', error);
+        alert('تعذر حذف المنشور: ' + error.message);
+    }
+};
+
+// ربط جميع دوال الحذف والتأكيد في التطبيق بهذه الدالة الموحدة
+window.confirmDeletePost = window.executeInstantDelete;
+window.confirmDeletePublicPost = window.executeInstantDelete;
+window.deletePost = window.executeInstantDelete;
+window.deletePublicPost = window.executeInstantDelete;
 
 
  </script>
