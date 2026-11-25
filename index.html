@@ -11423,11 +11423,15 @@ window.confirmDeletePublicPost = window.executeInstantDelete;
 window.deletePost = window.executeInstantDelete;
 window.deletePublicPost = window.executeInstantDelete;
 // ============================================================
-// نظام جلب معاينة المواقع (Fetch OG) المصحح + تعطيل المعاينة المكسورة القديمة
+// نظام جلب معاينة المواقع (OG Fetch) — نسخة نهائية مصححة
 // ============================================================
-window.fetchOgFromUrl = async function(rawUrl) {
+
+window.ogCache = window.ogCache || {};
+
+// ---------- 1) جلب بيانات OG ----------
+window.fetchOgFromUrl = async function (rawUrl) {
     const url = String(rawUrl || '').trim();
-    if (!url) return null;
+    if (!url || !/^https?:\/\//i.test(url)) return null;
     if (window.ogCache[url]) return window.ogCache[url];
 
     let domain = url;
@@ -11435,32 +11439,38 @@ window.fetchOgFromUrl = async function(rawUrl) {
 
     const resultData = { url, domain, title: domain, description: '', image: '' };
 
-    // 1) Microlink
+    // المحاولة 1: Microlink (الرابط الصحيح)
     try {
         const res = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
         const json = await res.json();
-        if (json.status === 'success' && json.data) {
+        if (json && json.status === 'success' && json.data) {
             resultData.title = json.data.title || domain;
             resultData.description = json.data.description || '';
+            const img = json.data.image;
             resultData.image =
-                (json.data.image && (json.data.image.url || json.data.image)) ||
-                (json.data.logo && json.data.logo.url) || '';
+                (img && (img.url || (typeof img === 'string' ? img : ''))) ||
+                (json.data.logo && json.data.logo.url) ||
+                '';
         }
-    } catch (e) { console.warn('microlink fail', e); }
+    } catch (e) { console.warn('Microlink fail:', e); }
 
-    // 2) AllOrigins
+    // المحاولة 2: AllOrigins (الرابط الصحيح)
     if (!resultData.image) {
         try {
             const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
             const proxyJson = await proxyRes.json();
             if (proxyJson && proxyJson.contents) {
                 const doc = new DOMParser().parseFromString(proxyJson.contents, 'text/html');
-                const ogImg = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
-                const ogTitle = doc.querySelector('meta[property="og:title"], title');
-                const ogDesc = doc.querySelector('meta[property="og:description"], meta[name="description"]');
+                const ogImg   = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"], meta[property="og:image:secure_url"]');
+                const ogTitle = doc.querySelector('meta[property="og:title"], meta[name="twitter:title"], title');
+                const ogDesc  = doc.querySelector('meta[property="og:description"], meta[name="description"], meta[name="twitter:description"]');
 
                 if (ogImg && ogImg.getAttribute('content')) {
-                    resultData.image = new URL(ogImg.getAttribute('content'), url).href;
+                    try {
+                        resultData.image = new URL(ogImg.getAttribute('content'), url).href;
+                    } catch (_) {
+                        resultData.image = ogImg.getAttribute('content');
+                    }
                 }
                 if (ogTitle) {
                     const t = ogTitle.getAttribute('content') || ogTitle.textContent;
@@ -11470,12 +11480,166 @@ window.fetchOgFromUrl = async function(rawUrl) {
                     resultData.description = ogDesc.getAttribute('content').trim();
                 }
             }
-        } catch (e) { console.warn('allorigins fail', e); }
+        } catch (e) { console.warn('AllOrigins fail:', e); }
     }
 
     window.ogCache[url] = resultData;
     return resultData;
 };
+
+// ---------- 2) بناء HTML البطاقة ----------
+window.buildOgContainerHTML = function (data) {
+    if (!data) return '';
+
+    const esc = (s) => String(s || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    let imageBlock = '';
+    if (data.image) {
+        // proxy احتياطي لكسر hotlink protection
+        const proxied = `https://images.weserv.nl/?url=${encodeURIComponent(
+            String(data.image).replace(/^https?:\/\//, '')
+        )}`;
+        const fallbackIcon = "this.onerror=null;this.src='" + proxied.replace(/'/g, "\\'") + "';this.addEventListener('error',function(){this.style.display='none';this.parentElement.innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;height:140px;background:#e7f3ff;color:#1877f2;font-size:34px;\"><i class=\\'fas fa-image\\'></i></div>';});";
+
+        imageBlock = `
+            <div class="og-img-holder" style="width:100%; max-height:240px; overflow:hidden; background:#f0f2f5;">
+                <img src="${esc(data.image)}" alt="" referrerpolicy="no-referrer" loading="lazy"
+                     style="width:100%; height:100%; min-height:140px; object-fit:cover; display:block;"
+                     onerror="${fallbackIcon}">
+            </div>`;
+    }
+
+    return `
+        <a href="${esc(data.url)}" target="_blank" rel="noopener noreferrer"
+           style="display:block; border:1px solid #dadde1; border-radius:12px; overflow:hidden; background:#f7f8fa; text-decoration:none; color:inherit; margin-top:8px;">
+            ${imageBlock}
+            <div style="padding:12px 15px; text-align:right; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <div style="flex:1; min-width:0;">
+                    <div style="font-size:11px; color:#65676b; font-weight:700; text-transform:uppercase; margin-bottom:3px;">${esc(data.domain)}</div>
+                    <div style="font-size:15px; font-weight:700; color:#050505; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(data.title)}</div>
+                    ${data.description ? `<div style="font-size:13px; color:#65676b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${esc(data.description)}</div>` : ''}
+                </div>
+                <div style="width:42px; height:42px; border-radius:10px; background:#e7f3ff; color:#1877f2; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <i class="fas fa-globe" style="font-size:20px;"></i>
+                </div>
+            </div>
+        </a>`;
+};
+
+// ---------- 3) مراقب صندوق الكتابة ----------
+function extractFirstUrl(text) {
+    const m = String(text || '').match(/https?:\/\/[^\s]+/);
+    return (m && m[0]) ? m[0] : '';
+}
+
+function isYouTube(u) {
+    return /youtube\.com|youtu\.be/i.test(u);
+}
+
+function syncComposerOg(textareaId, containerId) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+
+    let container = document.getElementById(containerId);
+    if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        container.style.cssText = 'display:none; margin:10px 0;';
+        textarea.insertAdjacentElement('afterend', container);
+    }
+
+    const currentText = (textarea.value || '').trim();
+    if (!currentText) {
+        if (container.style.display !== 'none') {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            delete textarea.dataset.lastOgUrl;
+        }
+        return;
+    }
+
+    const url = extractFirstUrl(currentText);
+
+    if (!url || isYouTube(url)) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        delete textarea.dataset.lastOgUrl;
+        return;
+    }
+
+    if (textarea.dataset.lastOgUrl === url) return;
+    textarea.dataset.lastOgUrl = url;
+
+    container.style.display = 'block';
+    container.innerHTML = '<div style="padding:10px; text-align:center; color:#1877f2; font-size:13px; background:#f0f2f5; border-radius:10px;"><i class="fas fa-spinner fa-spin"></i> جاري جلب معاينة الرابط...</div>';
+
+    window.fetchOgFromUrl(url).then(data => {
+        if (data && (textarea.value || '').includes(url)) {
+            container.innerHTML = window.buildOgContainerHTML(data);
+        }
+    }).catch(() => {
+        container.innerHTML = '';
+        container.style.display = 'none';
+    });
+}
+
+// ---------- 4) معاينة المنشورات المنشورة ----------
+async function hydratePublishedPostsOg() {
+    const cards = document.querySelectorAll('.post-card, .public-post-card');
+    for (const card of cards) {
+        if (card.dataset.ogDone === 'true') continue;
+        if (card.querySelector('.post-og-container')) { card.dataset.ogDone = 'true'; continue; }
+
+        // ابحث عن الرابط داخل محتوى المنشور فقط (وليس avatar/بروفايل)
+        let foundUrl = '';
+        const contentEl = card.querySelector('.post-content, .public-post-content, .post-text');
+        if (contentEl) {
+            // روابط <a> داخل المحتوى
+            const anchors = contentEl.querySelectorAll('a[href^="http"]');
+            for (const a of anchors) {
+                const href = a.getAttribute('href') || '';
+                if (href && !isYouTube(href)) { foundUrl = href; break; }
+            }
+            // إذا لم يوجد <a>، استخرج من النص
+            if (!foundUrl) {
+                const m = String(contentEl.innerText || '').match(/https?:\/\/[^\s]+/);
+                if (m && m[0] && !isYouTube(m[0])) foundUrl = m[0];
+            }
+        }
+
+        if (!foundUrl) { card.dataset.ogDone = 'true'; continue; }
+
+        const actionsBar = card.querySelector('.post-actions, .public-post-actions');
+        const ogWrapper = document.createElement('div');
+        ogWrapper.className = 'post-og-container';
+        ogWrapper.style.margin = '10px 0';
+
+        if (actionsBar) actionsBar.insertAdjacentElement('beforebegin', ogWrapper);
+        else card.appendChild(ogWrapper);
+
+        try {
+            const data = await window.fetchOgFromUrl(foundUrl);
+            if (data) {
+                ogWrapper.innerHTML = window.buildOgContainerHTML(data);
+                card.dataset.ogDone = 'true';
+            } else {
+                ogWrapper.remove();
+            }
+        } catch (e) {
+            ogWrapper.remove();
+        }
+    }
+}
+
+// ---------- 5) التشغيل ----------
+setInterval(() => {
+    try { syncComposerOg('postContent', 'mainOgPreviewContainer'); } catch (e) {}
+    try { syncComposerOg('publicPostContent', 'publicOgPreviewContainer'); } catch (e) {}
+    try { hydratePublishedPostsOg(); } catch (e) {}
+}, 700);
+
 
  </script>
  
