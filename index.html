@@ -11475,6 +11475,10 @@ if (json && json.status === 'success' && json.data) {
         (json.data.logo && json.data.logo.url) ||
         '';
 }
+     // ✅ إغلاق الدالة (كان مفقوداً)
+    window.ogCache[url] = resultData;
+    return resultData;
+};
 // ---------- 2) بناء HTML البطاقة ----------
 window.buildOgContainerHTML = function (data) {
     if (!data) return '';
