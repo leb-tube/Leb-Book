@@ -11422,7 +11422,7 @@ window.confirmDeletePost = window.executeInstantDelete;
 window.confirmDeletePublicPost = window.executeInstantDelete;
 window.deletePost = window.executeInstantDelete;
 window.deletePublicPost = window.executeInstantDelete;
- // ============================================================
+// ============================================================
 // نظام جلب معاينة المواقع (OG Fetch) — نسخة نهائية مصححة
 // ============================================================
 
@@ -11487,8 +11487,7 @@ window.fetchOgFromUrl = async function (rawUrl) {
     return resultData;
 };
 
-// ---------- 2) بناء HTML البطاقة ----------
- // ---------- 2) بناء HTML البطاقة (نظيفة وبدون تداخل علامات اقتباس) ----------
+// ---------- 2) بناء HTML البطاقة (نظيفة وبدون تداخل علامات اقتباس) ----------
 window.buildOgContainerHTML = function (data) {
     if (!data) return '';
 
@@ -11588,7 +11587,7 @@ function syncComposerOg(textareaId, containerId) {
 }
 
 // ---------- 4) معاينة المنشورات المنشورة (مكتملة بدون انقطاع) ----------
-  // ---------- 4) معاينة المنشورات المنشورة (تعمل على جميع قوالب المنشورات) ----------
+// ---------- 4) معاينة المنشورات المنشورة (تعمل على جميع قوالب المنشورات) ----------
 async function hydratePublishedPostsOg() {
     // استهداف جميع بطاقات المنشورات في الصفحة الرئيسية، العامة، وصفحة الصديق
     const cards = document.querySelectorAll('.post-card, .public-post-card, [data-post-id]');
@@ -11647,6 +11646,7 @@ async function hydratePublishedPostsOg() {
         }
     }
 }
+
 
 
  </script>
