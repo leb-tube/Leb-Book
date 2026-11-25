@@ -11423,13 +11423,37 @@ window.confirmDeletePublicPost = window.executeInstantDelete;
 window.deletePost = window.executeInstantDelete;
 window.deletePublicPost = window.executeInstantDelete;
 // ============================================================
-// نظام جلب معاينة المواقع (OG Fetch) — نسخة نهائية مصححة
+// نظام جلب معاينة المواقع (OG Fetch) — نسخة نهائية كاملة
 // ============================================================
 
 window.ogCache = window.ogCache || {};
 
+// ---------- 0) جلب HTML عبر عدة proxies ----------
+async function fetchHtmlViaProxies(url) {
+    const proxies = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        `https://api.cors.lol/?url=${encodeURIComponent(url)}`
+    ];
+
+    for (const proxyUrl of proxies) {
+        try {
+            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+            if (!res.ok) continue;
+            const text = await res.text();
+            if (text && text.length > 200 && /<meta|<title/i.test(text)) {
+                return text;
+            }
+        } catch (e) {
+            console.warn('Proxy failed:', proxyUrl.split('?')[0], e.message);
+        }
+    }
+    return null;
+}
+
 // ---------- 1) جلب بيانات OG ----------
- window.fetchOgFromUrl = async function (rawUrl) {
+window.fetchOgFromUrl = async function (rawUrl) {
     const url = String(rawUrl || '').trim();
     if (!url || !/^https?:\/\//i.test(url)) return null;
     if (window.ogCache[url]) return window.ogCache[url];
@@ -11441,26 +11465,24 @@ window.ogCache = window.ogCache || {};
 
     let json = null;
 
-    // المحاولة 1: بدون مفتاح
+    // المحاولة 1: Microlink بدون مفتاح
     try {
         const res1 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
         json = await res1.json();
     } catch (e) { console.warn('Microlink (no key) fail:', e); }
 
-    // هل لدينا صورة فعلية؟
     const hasImage = json && json.status === 'success' && json.data && json.data.image &&
         (typeof json.data.image === 'string' ? json.data.image : json.data.image.url);
 
-    // المحاولة 2: مع مفتاح (فقط إذا لا صورة)
+    // المحاولة 2: Microlink مع مفتاح (فقط إذا لا صورة)
     if (!hasImage) {
-        const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS'; 
+        const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS'; // ضع مفتاحك هنا إن أردت
         if (MICROLINK_KEY && MICROLINK_KEY !== 'YOUR_MICROLINK_KEY') {
             try {
                 const res2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`, {
                     headers: { 'x-api-key': MICROLINK_KEY }
                 });
                 const json2 = await res2.json();
-                // ✅ لا تستبدل إلا إذا الجديد يحتوي صورة فعلية
                 if (json2 && json2.status === 'success' && json2.data && json2.data.image) {
                     json = json2;
                 }
@@ -11468,7 +11490,7 @@ window.ogCache = window.ogCache || {};
         }
     }
 
-    // استخراج البيانات
+    // استخراج من Microlink
     if (json && json.status === 'success' && json.data) {
         resultData.title = json.data.title || domain;
         resultData.description = json.data.description || '';
@@ -11479,9 +11501,35 @@ window.ogCache = window.ogCache || {};
             '';
     }
 
+    // المحاولة 3: استخراج og:image من HTML عبر proxies
+    if (!resultData.image) {
+        const html = await fetchHtmlViaProxies(url);
+        if (html) {
+            try {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const pick = (sel) => {
+                    const el = doc.querySelector(sel);
+                    return el ? (el.getAttribute('content') || el.textContent || '').trim() : '';
+                };
+                const ogImg = pick('meta[property="og:image"], meta[property="og:image:secure_url"], meta[name="twitter:image"], meta[name="twitter:image:src"]');
+                const ogTitle = pick('meta[property="og:title"], meta[name="twitter:title"]') || (doc.title || '').trim();
+                const ogDesc = pick('meta[property="og:description"], meta[name="description"], meta[name="twitter:description"]');
+
+                if (ogImg) {
+                    try { resultData.image = new URL(ogImg, url).href; }
+                    catch (_) { resultData.image = ogImg; }
+                }
+                if (ogTitle && !resultData.title) resultData.title = ogTitle;
+                if (ogDesc && !resultData.description) resultData.description = ogDesc;
+            } catch (e) { console.warn('HTML parse fail:', e); }
+        }
+    }
+
+    console.log('OG result for', url, resultData);
     window.ogCache[url] = resultData;
     return resultData;
 };
+
 // ---------- 2) بناء HTML البطاقة ----------
 window.buildOgContainerHTML = function (data) {
     if (!data) return '';
@@ -11490,7 +11538,6 @@ window.buildOgContainerHTML = function (data) {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-    // استخراج أول حرف من الدومين كأيقونة نصية (fallback إذا لم توجد أيقونة)
     const initial = (data.domain || '?').trim().charAt(0).toUpperCase();
 
     let imageBlock = '';
@@ -11534,7 +11581,6 @@ window.buildOgContainerHTML = function (data) {
                 display:flex; align-items:flex-start; gap:12px;
                 text-align:right; direction:rtl;">
 
-                <!-- أيقونة الموقع -->
                 <div style="
                     width:40px; height:40px; flex-shrink:0;
                     border-radius:10px;
@@ -11546,7 +11592,6 @@ window.buildOgContainerHTML = function (data) {
                     ${esc(initial)}
                 </div>
 
-                <!-- النصوص -->
                 <div style="flex:1; min-width:0;">
                     <div style="
                         font-size:11px; color:#8a8d91; font-weight:700;
@@ -11571,7 +11616,6 @@ window.buildOgContainerHTML = function (data) {
                 </div>
             </div>
 
-            <!-- شريط سفلي أنيق -->
             <div style="
                 padding:9px 16px;
                 border-top:1px solid #f0f2f5;
@@ -11592,7 +11636,7 @@ window.buildOgContainerHTML = function (data) {
         </a>`;
 };
 
-// ---------- 2.5) معالجة فشل الصور (بدون onerror في HTML) ----------
+// ---------- 2.5) معالجة فشل الصور ----------
 window.__ogImgFail = function (imgEl, proxiedUrl) {
     imgEl.onerror = null;
     if (!imgEl.dataset.triedProxy && proxiedUrl) {
@@ -11612,6 +11656,11 @@ window.__ogImgFail = function (imgEl, proxiedUrl) {
 window.bindOgImageErrors = function (root) {
     (root || document).querySelectorAll('img.og-thumb:not([data-bound])').forEach(img => {
         img.dataset.bound = '1';
+        // إذا فشلت الصورة قبل الربط
+        if (img.complete && img.naturalWidth === 0) {
+            window.__ogImgFail(img, img.dataset.proxy || '');
+            return;
+        }
         img.addEventListener('error', function () {
             window.__ogImgFail(this, this.dataset.proxy || '');
         });
@@ -11641,7 +11690,7 @@ async function renderOgInto(container, url, guardFn) {
         if (container.dataset.ogUrl !== url) return;
         if (data && (data.image || data.title)) {
             container.innerHTML = window.buildOgContainerHTML(data);
-            window.bindOgImageErrors(container);   // ✅ اربط onerror برمجياً
+            window.bindOgImageErrors(container);
         } else {
             container.innerHTML = '';
             container.style.display = 'none';
@@ -11756,9 +11805,8 @@ setInterval(() => {
     try { syncComposerOg('postContent', 'mainOgPreviewContainer'); } catch (e) {}
     try { syncComposerOg('publicPostContent', 'publicOgPreviewContainer'); } catch (e) {}
     try { scanAllPosts(document); } catch (e) {}
-    try { window.bindOgImageErrors(document); } catch (e) {}   // ✅ ربط أي صور جديدة
-}, 1500); 
-
+    try { window.bindOgImageErrors(document); } catch (e) {}
+}, 1500);
  </script>
  
 
