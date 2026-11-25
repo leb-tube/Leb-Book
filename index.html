@@ -11226,6 +11226,97 @@ window.focusUnifiedComment = function(postId) {
         }
     }
 };
+    window.shareUnifiedPost = async function(postId) {
+    try {
+        // 1. بناء رابط مباشر للمنشور بناءً على رابط الموقع الحالي
+        const baseUrl = window.location.origin + window.location.pathname;
+        const shareUrl = `${baseUrl}?post=${postId}`;
+
+        // 2. جلب نص مختصر من المنشور إن وُجد لإرفاقه مع الرابط
+        let shareText = 'شاهد هذا المنشور على Leb-Book:';
+        try {
+            const docSnap = await db.collection('posts').doc(postId).get();
+            if (docSnap.exists && docSnap.data().content) {
+                const snippet = docSnap.data().content.substring(0, 80);
+                shareText = `${snippet}...\nشاهد المنشور كاملاً على Leb-Book:`;
+            }
+        } catch (e) {}
+
+        // 3. استخدام نافذة المشاركة الأصلية للهواتف إن كانت مدعومة، وإلا نسخ الرابط للحافظة
+        if (navigator.share) {
+            await navigator.share({
+                title: 'منشور على Leb-Book',
+                text: shareText,
+                url: shareUrl
+            });
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(shareUrl);
+            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
+                window.authSystem.showMessage('تم نسخ رابط المنشور إلى الحافظة! يمكنك لصقه ومشاركته الآن.', 'success');
+            } else {
+                alert('تم نسخ رابط المنشور: ' + shareUrl);
+            }
+        } else {
+            // خطة بديلة للمتصفحات القديمة
+            prompt('انسخ رابط المنشور للمشاركة:', shareUrl);
+        }
+
+        // 4. زيادة عداد المشاركات في قاعدة البيانات والواجهة
+        await db.collection('posts').doc(postId).update({
+            shares: firebase.firestore.FieldValue.increment(1)
+        });
+
+        document.querySelectorAll(`[data-share-count="${postId}"]`).forEach(span => {
+            span.textContent = (parseInt(span.textContent) || 0) + 1;
+        });
+
+    } catch (error) {
+        // تجاهل الخطأ إذا قام المستخدم بإلغاء نافذة المشاركة يدوياً
+        if (error.name !== 'AbortError') {
+            console.error('❌ خطأ في مشاركة المنشور:', error);
+        }
+    }
+};
+// التحقق من وجود رابط منشور مشارك في عنوان الصفحة (?post=ID) عند الفتح
+window.checkSharedPostInUrl = async function() {
+    const params = new URLSearchParams(window.location.search);
+    const sharedPostId = params.get('post');
+    if (!sharedPostId) return;
+
+    try {
+        const doc = await db.collection('posts').doc(sharedPostId).get();
+        if (!doc.exists) return;
+
+        const post = doc.data();
+        const authorName = post.authorName || post.userName || 'مستخدم';
+        const rawText = (post.content || post.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').split('\n').join('<br>');
+        const imgHTML = post.imageUrl ? `<img src="${post.imageUrl}" style="width:100%; max-height:400px; object-fit:contain; border-radius:10px; margin-top:12px;">` : '';
+
+        // إنشاء نافذة عرض المنشور المشارك
+        const modal = document.createElement('div');
+        modal.id = 'sharedPostModal';
+        modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100000; display:flex; align-items:center; justify-content:center; padding:15px; direction:rtl;';
+        modal.innerHTML = `
+            <div style="background:#fff; max-width:600px; width:100%; max-height:90vh; overflow-y:auto; border-radius:14px; padding:20px; position:relative; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+                <button onclick="document.getElementById('sharedPostModal').remove(); window.history.replaceState({}, '', window.location.pathname);"
+                        style="position:absolute; top:14px; left:14px; background:#f0f2f5; border:none; width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:16px;">✕</button>
+                <h3 style="margin:0 0 14px; color:#1877f2; font-size:16px;"><i class="fas fa-share-alt"></i> منشور مشارك من ${authorName}</h3>
+                <div style="font-size:15px; line-height:1.6; color:#1c1e21;">${rawText}</div>
+                ${imgHTML}
+                ${typeof window.renderPostCommentsSection === 'function' ? window.renderPostCommentsSection(post, sharedPostId) : ''}
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } catch (e) {
+        console.error('❌ خطأ في فتح المنشور المشارك:', e);
+    }
+};
+
+// تشغيل الفحص بعد اكتمال تحميل الصفحة
+window.addEventListener('load', () => {
+    setTimeout(window.checkSharedPostInUrl, 1200);
+});
+
  </script>
  
 
