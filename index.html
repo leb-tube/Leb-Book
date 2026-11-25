@@ -11423,123 +11423,44 @@ window.confirmDeletePublicPost = window.executeInstantDelete;
 window.deletePost = window.executeInstantDelete;
 window.deletePublicPost = window.executeInstantDelete;
 // ============================================================
-// نظام جلب معاينة المواقع (OG Fetch) — نسخة نهائية مصححة
+// إدارة معاينة OG — نسخة تُبقي البطاقة بعد النشر
 // ============================================================
 
-window.ogCache = window.ogCache || {};
-
-// ---------- 1) جلب بيانات OG ----------
-window.fetchOgFromUrl = async function (rawUrl) {
-    const url = String(rawUrl || '').trim();
-    if (!url || !/^https?:\/\//i.test(url)) return null;
-    if (window.ogCache[url]) return window.ogCache[url];
-
-    let domain = url;
-    try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) {}
-
-    const resultData = { url, domain, title: domain, description: '', image: '' };
-
-    // المحاولة 1: Microlink (الرابط الصحيح)
-    try {
-        const res = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
-        const json = await res.json();
-        if (json && json.status === 'success' && json.data) {
-            resultData.title = json.data.title || domain;
-            resultData.description = json.data.description || '';
-            const img = json.data.image;
-            resultData.image =
-                (img && (img.url || (typeof img === 'string' ? img : ''))) ||
-                (json.data.logo && json.data.logo.url) ||
-                '';
-        }
-    } catch (e) { console.warn('Microlink fail:', e); }
-
-    // المحاولة 2: AllOrigins (الرابط الصحيح)
-    if (!resultData.image) {
-        try {
-            const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
-            const proxyJson = await proxyRes.json();
-            if (proxyJson && proxyJson.contents) {
-                const doc = new DOMParser().parseFromString(proxyJson.contents, 'text/html');
-                const ogImg   = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"], meta[property="og:image:secure_url"]');
-                const ogTitle = doc.querySelector('meta[property="og:title"], meta[name="twitter:title"], title');
-                const ogDesc  = doc.querySelector('meta[property="og:description"], meta[name="description"], meta[name="twitter:description"]');
-
-                if (ogImg && ogImg.getAttribute('content')) {
-                    try {
-                        resultData.image = new URL(ogImg.getAttribute('content'), url).href;
-                    } catch (_) {
-                        resultData.image = ogImg.getAttribute('content');
-                    }
-                }
-                if (ogTitle) {
-                    const t = ogTitle.getAttribute('content') || ogTitle.textContent;
-                    if (t && t.trim()) resultData.title = t.trim();
-                }
-                if (ogDesc && ogDesc.getAttribute('content')) {
-                    resultData.description = ogDesc.getAttribute('content').trim();
-                }
-            }
-        } catch (e) { console.warn('AllOrigins fail:', e); }
-    }
-
-    window.ogCache[url] = resultData;
-    return resultData;
-};
-
-// ---------- 2) بناء HTML البطاقة ----------
- // ---------- 2) بناء HTML البطاقة (نظيفة وبدون تداخل علامات اقتباس) ----------
-window.buildOgContainerHTML = function (data) {
-    if (!data) return '';
-
-    const esc = (s) => String(s || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-
-    let imageBlock = '';
-    if (data.image) {
-        const cleanImgUrl = String(data.image).replace(/^https?:\/\//, '');
-        const proxied = `https://images.weserv.nl/?url=${encodeURIComponent(cleanImgUrl)}`;
-
-        imageBlock = `
-            <div class="og-img-holder" style="width:100%; max-height:240px; overflow:hidden; background:#f0f2f5;">
-                <img src="${esc(data.image)}" alt="" referrerpolicy="no-referrer" loading="lazy"
-                     style="width:100%; height:100%; max-height:240px; object-fit:cover; display:block;"
-                     data-proxy="${esc(proxied)}"
-                     onerror="if(!this.dataset.triedProxy){this.dataset.triedProxy='1';this.src=this.dataset.proxy;}else{this.parentElement.remove();}">
-            </div>`;
-    }
-
-    return `
-        <a href="${esc(data.url)}" target="_blank" rel="noopener noreferrer"
-           style="display:block; border:1px solid #dadde1; border-radius:12px; overflow:hidden; background:#f7f8fa; text-decoration:none; color:inherit; margin-top:8px;">
-            ${imageBlock}
-            <div style="padding:12px 15px; text-align:right; display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                <div style="flex:1; min-width:0;">
-                    <div style="font-size:11px; color:#65676b; font-weight:700; text-transform:uppercase; margin-bottom:3px;">${esc(data.domain)}</div>
-                    <div style="font-size:15px; font-weight:700; color:#050505; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(data.title)}</div>
-                    ${data.description ? `<div style="font-size:13px; color:#65676b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${esc(data.description)}</div>` : ''}
-                </div>
-                <div style="width:42px; height:42px; border-radius:10px; background:#e7f3ff; color:#1877f2; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                    <i class="fas fa-globe" style="font-size:20px;"></i>
-                </div>
-            </div>
-        </a>`;
-};
-
-// ---------- 3) مراقب صندوق الكتابة ----------
+// ---------- استخراج أول رابط ----------
 function extractFirstUrl(text) {
-    const m = String(text || '').match(/https?:\/\/[^\s]+/);
-    return (m && m) ? m : '';
+    const m = String(text || '').match(/https?:\/\/[^\s"'<>]+/);
+    return (m && m[0]) ? m[0] : '';
+}
+function isYouTube(u) { return /youtube\.com|youtu\.be/i.test(u); }
+
+// ---------- رسم البطاقة في حاوية ----------
+async function renderOgInto(container, url, guardFn) {
+    if (!container || !url) return;
+    if (container.dataset.ogUrl === url) return;        // نفس الرابط، لا تعيد
+    container.dataset.ogUrl = url;
+    container.style.display = 'block';
+    container.innerHTML =
+        '<div style="padding:10px;text-align:center;color:#1877f2;font-size:13px;background:#f0f2f5;border-radius:10px;">' +
+        '<i class="fas fa-spinner fa-spin"></i> جاري جلب معاينة الرابط...</div>';
+
+    try {
+        const data = await window.fetchOgFromUrl(url);
+        // تحقق أن الرابط لا يزال موجوداً في المصدر (منع التحديث الخاطئ)
+        if (guardFn && !guardFn()) return;
+        if (container.dataset.ogUrl !== url) return;
+        if (data && (data.image || data.title)) {
+            container.innerHTML = window.buildOgContainerHTML(data);
+        } else {
+            container.innerHTML = '';
+            container.style.display = 'none';
+        }
+    } catch (e) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+    }
 }
 
-function isYouTube(u) {
-    return /youtube\.com|youtu\.be/i.test(u);
-}
-
+// ---------- صندوق الكتابة ----------
 function syncComposerOg(textareaId, containerId) {
     const textarea = document.getElementById(textareaId);
     if (!textarea) return;
@@ -11548,103 +11469,106 @@ function syncComposerOg(textareaId, containerId) {
     if (!container) {
         container = document.createElement('div');
         container.id = containerId;
-        container.style.cssText = 'display:none; margin:10px 0;';
+        container.style.cssText = 'display:none;margin:10px 0;';
         textarea.insertAdjacentElement('afterend', container);
     }
 
     const currentText = (textarea.value || '').trim();
-    if (!currentText) {
-        if (container.style.display !== 'none') {
-            container.style.display = 'none';
-            container.innerHTML = '';
-            delete textarea.dataset.lastOgUrl;
-        }
-        return;
-    }
-
     const url = extractFirstUrl(currentText);
 
     if (!url || isYouTube(url)) {
         container.style.display = 'none';
         container.innerHTML = '';
-        delete textarea.dataset.lastOgUrl;
+        delete container.dataset.ogUrl;
         return;
     }
 
-    if (textarea.dataset.lastOgUrl === url) return;
-    textarea.dataset.lastOgUrl = url;
-
-    container.style.display = 'block';
-    container.innerHTML = '<div style="padding:10px; text-align:center; color:#1877f2; font-size:13px; background:#f0f2f5; border-radius:10px;"><i class="fas fa-spinner fa-spin"></i> جاري جلب معاينة الرابط...</div>';
-
-    window.fetchOgFromUrl(url).then(data => {
-        if (data && (textarea.value || '').includes(url)) {
-            container.innerHTML = window.buildOgContainerHTML(data);
-        }
-    }).catch(() => {
-        container.innerHTML = '';
-        container.style.display = 'none';
-    });
+    renderOgInto(container, url, () => (textarea.value || '').includes(url));
 }
 
-// ---------- 4) معاينة المنشورات المنشورة (مكتملة بدون انقطاع) ----------
-async function hydratePublishedPostsOg() {
-    const cards = document.querySelectorAll('.post-card, .public-post-card');
-    for (const card of cards) {
-        if (card.dataset.ogDone === 'true') continue;
-        if (card.querySelector('.post-og-container')) {
-            card.dataset.ogDone = 'true';
-            continue;
-        }
+// ---------- معالجة بطاقة منشور واحدة ----------
+function processPostCard(card) {
+    if (!card || card.dataset.ogDone === 'true') return;
+    if (card.dataset.ogProcessing === 'true') return;
 
-        let foundUrl = '';
-        const contentEl = card.querySelector('.post-content, .public-post-content, .post-text, div[style*="line-height:1.6"], div[style*="line-height: 1.6"]');
-
-        if (contentEl) {
-            // 1. البحث في روابط <a> داخل المحتوى
-            const anchors = contentEl.querySelectorAll('a[href^="http"]');
-            for (const a of anchors) {
-                const href = a.getAttribute('href') || '';
-                if (href && !isYouTube(href)) {
-                    foundUrl = href;
-                    break;
-                }
-            }
-            // 2. البحث في النص العادي إذا لم يوجد وسم <a>
-            if (!foundUrl) {
-                const candidate = extractFirstUrl(contentEl.innerText || contentEl.textContent);
-                if (candidate && !isYouTube(candidate)) {
-                    foundUrl = candidate;
-                }
-            }
-        }
-
+    // موجودة مسبقاً؟
+    if (card.querySelector(':scope > .post-og-container')) {
         card.dataset.ogDone = 'true';
-        if (!foundUrl) continue;
+        return;
+    }
 
-        const actionsBar = card.querySelector('.post-actions, .public-post-actions');
-        const ogWrapper = document.createElement('div');
-        ogWrapper.className = 'post-og-container';
-        ogWrapper.style.margin = '10px 0';
+    // ابحث عن الرابط في محتوى المنشور
+    const contentEl = card.querySelector(
+        '.post-content, .public-post-content, .post-text, .post-body, .post-caption, .post-description'
+    );
+    const scope = contentEl || card;
 
-        if (actionsBar) {
-            actionsBar.insertAdjacentElement('beforebegin', ogWrapper);
-        } else {
-            card.appendChild(ogWrapper);
-        }
-
-        const data = await window.fetchOgFromUrl(foundUrl);
-        if (data) {
-            ogWrapper.innerHTML = window.buildOgContainerHTML(data);
+    let foundUrl = '';
+    const anchors = scope.querySelectorAll('a[href^="http"]');
+    for (const a of anchors) {
+        const href = a.getAttribute('href') || '';
+        if (href && !isYouTube(href) && !a.closest('.post-og-container')) {
+            foundUrl = href; break;
         }
     }
+    if (!foundUrl) {
+        const txt = scope.innerText || scope.textContent || '';
+        const m = txt.match(/https?:\/\/[^\s"'<>]+/);
+        if (m && m[0] && !isYouTube(m[0])) foundUrl = m[0];
+    }
+
+    if (!foundUrl) {
+        card.dataset.ogDone = 'true';
+        return;
+    }
+
+    card.dataset.ogProcessing = 'true';
+
+    const ogWrapper = document.createElement('div');
+    ogWrapper.className = 'post-og-container';
+    ogWrapper.style.margin = '10px 0';
+
+    const actionsBar = card.querySelector('.post-actions, .public-post-actions');
+    if (actionsBar) actionsBar.insertAdjacentElement('beforebegin', ogWrapper);
+    else card.appendChild(ogWrapper);
+
+    renderOgInto(ogWrapper, foundUrl, () => card.isConnected && !card.dataset.ogRemoved)
+        .finally(() => {
+            card.dataset.ogProcessing = 'false';
+            card.dataset.ogDone = 'true';
+        });
 }
 
+function scanAllPosts(root) {
+    const sel = '.post-card, .public-post-card, .post, .feed-post, .post-item';
+    (root || document).querySelectorAll(sel).forEach(processPostCard);
+}
+
+// ---------- MutationObserver: يمسك المنشورات الجديدة فوراً ----------
+const ogObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+        for (const node of m.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            // إن كانت البطاقة نفسها
+            if (node.matches && node.matches('.post-card, .public-post-card, .post, .feed-post, .post-item')) {
+                processPostCard(node);
+            }
+            // أو تحوي بطاقات
+            if (node.querySelectorAll) {
+                node.querySelectorAll('.post-card, .public-post-card, .post, .feed-post, .post-item')
+                    .forEach(processPostCard);
+            }
+        }
+    }
+});
+ogObserver.observe(document.body, { childList: true, subtree: true });
+
+// ---------- شبكة أمان: فحص دوري أقل تواتراً ----------
 setInterval(() => {
-    syncComposerOg('postContent', 'mainOgPreviewContainer');
-    syncComposerOg('publicPostContent', 'publicOgPreviewContainer');
-    hydratePublishedPostsOg();
-}, 700);
+    try { syncComposerOg('postContent', 'mainOgPreviewContainer'); } catch (e) {}
+    try { syncComposerOg('publicPostContent', 'publicOgPreviewContainer'); } catch (e) {}
+    try { scanAllPosts(document); } catch (e) {}
+}, 1500);
 
  </script>
  
