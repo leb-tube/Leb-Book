@@ -11444,7 +11444,7 @@ async function fetchHtmlViaProxies(url) {
     for (const proxyUrl of proxies) {
         try {
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 5000); // 5 ثوانٍ بدل 8
+            const timer = setTimeout(() => controller.abort(), 500); // 5 ثوانٍ بدل 8
             const res = await fetch(proxyUrl, { signal: controller.signal });
             clearTimeout(timer);
             if (!res.ok) continue;
@@ -11531,7 +11531,8 @@ window.fetchOgFromUrl = async function (rawUrl) {
         }
     }
 
-console.log('OG result for', url, JSON.stringify(resultData));
+    
+    console.log('OG result for', url, resultData);
     window.ogCache[url] = resultData;
     return resultData;
 };
