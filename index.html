@@ -8,6 +8,8 @@
 <meta property="og:image" content="https://github.com/leb-tube/Leb-Book/blob/main/leb-book.png?raw=true" />
 <meta property="og:url" content="https://leb-tube.github.io/Leb-Book/" />
 <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image">
+
  <style>
  * {
     margin: 0;
@@ -11433,13 +11435,18 @@ async function fetchHtmlViaProxies(url) {
     const proxies = [
         `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        `https://corsproxy.io/?${encodeURIComponent(url)}`,
-        `https://api.cors.lol/?url=${encodeURIComponent(url)}`
+        `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+        `https://api.cors.lol/?url=${encodeURIComponent(url)}`,
+        `https://thingproxy.freeboard.io/fetch/${url}`,
+        `https://proxy.cors.sh/${url}`
     ];
 
     for (const proxyUrl of proxies) {
         try {
-            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 5000); // 5 ثوانٍ بدل 8
+            const res = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(timer);
             if (!res.ok) continue;
             const text = await res.text();
             if (text && text.length > 200 && /<meta|<title/i.test(text)) {
@@ -11451,7 +11458,6 @@ async function fetchHtmlViaProxies(url) {
     }
     return null;
 }
-
 // ---------- 1) جلب بيانات OG ----------
 window.fetchOgFromUrl = async function (rawUrl) {
     const url = String(rawUrl || '').trim();
@@ -11525,7 +11531,7 @@ window.fetchOgFromUrl = async function (rawUrl) {
         }
     }
 
-    console.log('OG result for', url, resultData);
+console.log('OG result for', url, JSON.stringify(resultData));
     window.ogCache[url] = resultData;
     return resultData;
 };
