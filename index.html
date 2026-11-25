@@ -10980,6 +10980,200 @@ function createFriendPostHTML(post) {
 
 // تهيئة التنسيقات فور تحميل الملف
 initFriendProfileSystem();
+// ============================================================
+// نظام التعليقات والتفاعل الموحد لجميع الصفحات
+// ============================================================
+
+window.renderPostCommentsSection = function(post, postId) {
+    const comments = Array.isArray(post.comments) ? post.comments : [];
+    const fallbackAvatar = typeof generateAvatarSVG === 'function' ? generateAvatarSVG('م', 32) : 'https://pravatar.cc';
+
+    const commentsListHTML = comments.map(c => {
+        const cName = c.userName || 'مستخدم';
+        const cPhoto = c.userPhoto || (typeof generateAvatarSVG === 'function' ? generateAvatarSVG(cName, 32) : fallbackAvatar);
+        const cText = (c.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        let cTime = '';
+        if (c.createdAt) {
+            const d = new Date(c.createdAt);
+            if (!isNaN(d.getTime())) {
+                cTime = d.toLocaleTimeString('ar-LB', { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+
+        return `
+            <div class="unified-comment-item" style="display:flex; gap:10px; align-items:flex-start; margin-bottom:10px;">
+                <img src="${cPhoto}" alt="${cName}" onclick="window.viewFriendProfile && window.viewFriendProfile('${c.userId}')"
+                     style="width:32px; height:32px; border-radius:50%; object-fit:cover; cursor:pointer; flex-shrink:0;"
+                     onerror="this.onerror=null; this.src='${fallbackAvatar}';">
+                <div style="background:#f0f2f5; padding:8px 14px; border-radius:16px; max-width:85%; word-break:break-word;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+                        <strong style="font-size:13px; color:#050505; cursor:pointer;" onclick="window.viewFriendProfile && window.viewFriendProfile('${c.userId}')">${cName}</strong>
+                        ${cTime ? `<span style="font-size:11px; color:#65676b;">${cTime}</span>` : ''}
+                    </div>
+                    <p style="margin:0; font-size:14px; color:#1c1e21; line-height:1.4;">${cText}</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="unified-comments-wrapper" id="comments-wrapper-${postId}" style="margin-top:12px; padding-top:12px; border-top:1px solid #e4e6eb;">
+            <div class="unified-comments-list" id="comments-list-${postId}" style="max-height:260px; overflow-y:auto; margin-bottom:10px;">
+                ${commentsListHTML}
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="comment-input-${postId}" placeholder="اكتب تعليقاً..."
+                       onkeypress="if(event.key==='Enter') window.submitUnifiedComment('${postId}')"
+                       style="flex:1; padding:9px 15px; border:1px solid #ccd0d5; border-radius:20px; font-size:14px; background:#f0f2f5; outline:none;">
+                <button onclick="window.submitUnifiedComment('${postId}')"
+                        style="background:#1877f2; color:#fff; border:none; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <i class="fas fa-paper-plane" style="font-size:14px;"></i>
+                </button>
+            </div>
+        </div>
+    `;
+};
+
+window.submitUnifiedComment = async function(postId) {
+    const currentUser = firebase.auth().currentUser;
+    if (!currentUser) {
+        alert('يجب تسجيل الدخول لإضافة تعليق');
+        return;
+    }
+
+    const inputs = document.querySelectorAll(`#comment-input-${postId}`);
+    let activeInput = null;
+    let commentText = '';
+
+    inputs.forEach(inp => {
+        if (inp.value.trim()) {
+            activeInput = inp;
+            commentText = inp.value.trim();
+        }
+    });
+
+    if (!commentText) return;
+
+    try {
+        if (activeInput) activeInput.disabled = true;
+
+        const userData = window.authSystem?.getUserData() || {};
+        const userName = userData.name || currentUser.displayName || 'مستخدم';
+        const userPhoto = userData.profilePicture || currentUser.photoURL || (typeof generateAvatarSVG === 'function' ? generateAvatarSVG(userName, 32) : '');
+
+        const commentObj = {
+            userId: currentUser.uid,
+            userName: userName,
+            userPhoto: userPhoto,
+            text: commentText,
+            createdAt: new Date().toISOString()
+        };
+
+        await db.collection('posts').doc(postId).update({
+            comments: firebase.firestore.FieldValue.arrayUnion(commentObj)
+        });
+
+        const safeText = commentText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const nowStr = new Date().toLocaleTimeString('ar-LB', { hour: '2-digit', minute: '2-digit' });
+
+        document.querySelectorAll(`#comments-list-${postId}`).forEach(list => {
+            const itemHTML = `
+                <div class="unified-comment-item" style="display:flex; gap:10px; align-items:flex-start; margin-bottom:10px;">
+                    <img src="${userPhoto}" alt="${userName}" style="width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0;">
+                    <div style="background:#f0f2f5; padding:8px 14px; border-radius:16px; max-width:85%; word-break:break-word;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+                            <strong style="font-size:13px; color:#050505;">${userName}</strong>
+                            <span style="font-size:11px; color:#65676b;">${nowStr}</span>
+                        </div>
+                        <p style="margin:0; font-size:14px; color:#1c1e21; line-height:1.4;">${safeText}</p>
+                    </div>
+                </div>
+            `;
+            list.insertAdjacentHTML('beforeend', itemHTML);
+            list.scrollTop = list.scrollHeight;
+        });
+
+        document.querySelectorAll(`[data-comment-count="${postId}"]`).forEach(badge => {
+            const current = parseInt(badge.textContent) || 0;
+            badge.textContent = current + 1;
+        });
+
+        if (activeInput) {
+            activeInput.value = '';
+            activeInput.disabled = false;
+            activeInput.focus();
+        }
+    } catch (error) {
+        console.error('❌ خطأ في إضافة التعليق:', error);
+        if (activeInput) activeInput.disabled = false;
+        alert('تعذر إرسال التعليق');
+    }
+};
+
+window.toggleUnifiedLike = async function(postId, btn) {
+    const currentUser = firebase.auth().currentUser;
+    if (!currentUser) {
+        alert('يجب تسجيل الدخول أولاً');
+        return;
+    }
+
+    try {
+        const postRef = db.collection('posts').doc(postId);
+        const postDoc = await postRef.get();
+        if (!postDoc.exists) return;
+
+        const likes = Array.isArray(postDoc.data().likes) ? postDoc.data().likes : [];
+        const isLiked = likes.includes(currentUser.uid);
+
+        if (isLiked) {
+            await postRef.update({ likes: firebase.firestore.FieldValue.arrayRemove(currentUser.uid) });
+        } else {
+            await postRef.update({ likes: firebase.firestore.FieldValue.arrayUnion(currentUser.uid) });
+        }
+
+        const newCount = isLiked ? Math.max(0, likes.length - 1) : likes.length + 1;
+        const nowLiked = !isLiked;
+
+        document.querySelectorAll(`[data-like-btn="${postId}"]`).forEach(button => {
+            button.classList.toggle('liked', nowLiked);
+            button.style.color = nowLiked ? '#1877f2' : '';
+            const icon = button.querySelector('i');
+            if (icon) icon.className = nowLiked ? 'fas fa-thumbs-up' : 'far fa-thumbs-up';
+        });
+
+        document.querySelectorAll(`[data-like-count="${postId}"]`).forEach(span => {
+            span.textContent = newCount;
+        });
+    } catch (error) {
+        console.error('❌ خطأ في الإعجاب:', error);
+    }
+};
+
+window.shareUnifiedPost = async function(postId) {
+    try {
+        await db.collection('posts').doc(postId).update({
+            shares: firebase.firestore.FieldValue.increment(1)
+        });
+        document.querySelectorAll(`[data-share-count="${postId}"]`).forEach(span => {
+            span.textContent = (parseInt(span.textContent) || 0) + 1;
+        });
+        if (window.authSystem) {
+            window.authSystem.showMessage('تمت مشاركة المنشور بنجاح!', 'success');
+        }
+    } catch (error) {
+        console.error('❌ خطأ في المشاركة:', error);
+    }
+};
+
+window.focusUnifiedComment = function(postId) {
+    const inputs = document.querySelectorAll(`#comment-input-${postId}`);
+    for (const inp of inputs) {
+        if (inp.offsetParent !== null) {
+            inp.focus();
+            break;
+        }
+    }
+};
 
 
  </script>
