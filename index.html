@@ -6785,36 +6785,36 @@ createVideoEmbed(videoData) {
         </p>
     `;
    }
-           } else if (videoData.type === 'website') {
-        return window.renderWebsiteCardHTML(videoData);
-
- else if (videoData.type === 'direct') {
-        return `
-            <div style="margin: 15px 0;">
-                <video controls style="width: 100%; max-height: 400px; border-radius: 12px;">
-                    <source src="${videoData.url}" type="video/mp4">
-                    متصفحك لا يدعم تشغيل الفيديو.
-                </video>
-                <p style="text-align: center; margin-top: 8px;">
-                    <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
-                        <i class="fas fa-external-link-alt"></i> فتح الفيديو
+   } else if (videoData.type === 'direct') {
+            return `
+                <div style="margin: 15px 0;">
+                    <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
+                        <source src="${videoData.url}" type="video/mp4">
+                        متصفحك لا يدعم تشغيل الفيديو.
+                    </video>
+                    <p style="text-align: center; margin-top: 8px;">
+                        <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
+                            <i class="fas fa-external-link-alt"></i> فتح الفيديو
+                        </a>
+                    </p>
+                </div>
+            `;
+        } else if (videoData.type === 'website') {
+            return typeof window.renderWebsiteCardHTML === 'function'
+                ? window.renderWebsiteCardHTML(videoData)
+                : `<a href="${videoData.url}" target="_blank" style="color:#1877f2;">${videoData.url}</a>`;
+        } else {
+            return `
+                <div style="margin: 15px 0; padding: 15px; background: #f0f2f5; border-radius: 12px; text-align: center;">
+                    <i class="fas fa-link" style="font-size: 32px; color: #65676b; margin-bottom: 8px;"></i>
+                    <a href="${videoData.url}" target="_blank" 
+                       style="color: #1877f2; text-decoration: none; word-break: break-all; display: block;">
+                        ${videoData.url}
                     </a>
-                </p>
-            </div>
-        `;
-    } else {
-        return `
-            <div style="margin: 15px 0; padding: 15px; background: #f0f2f5; border-radius: 12px; text-align: center;">
-                <i class="fas fa-video" style="font-size: 40px; color: #65676b; margin-bottom: 10px;"></i>
-                <p style="margin-bottom: 10px; color: #1c1e21; font-weight: 600;">رابط فيديو</p>
-                <a href="${videoData.url}" target="_blank" 
-                   style="color: #1877f2; text-decoration: none; word-break: break-all; display: block;">
-                    ${videoData.url}
-                </a>
-            </div>
-        `;
+                </div>
+            `;
+        }
     }
-}
 
     createPostMenu(postId) {
         return `
@@ -9140,36 +9140,36 @@ createVideoEmbedForPublic(videoData) {
                 </a>
             </p>
         `;
-            } else if (videoData.type === 'website') {
-        return window.renderWebsiteCardHTML(videoData);
-
-    } else if (videoData.type === 'direct') {
-        return `
-            <div style="margin: 15px 0;">
-                <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
-                    <source src="${videoData.url}" type="video/mp4">
-                    متصفحك لا يدعم تشغيل الفيديو.
-                </video>
-                <p style="text-align: center; margin-top: 8px;">
-                    <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
-                        <i class="fas fa-external-link-alt"></i> فتح الفيديو
+       } else if (videoData.type === 'direct') {
+            return `
+                <div style="margin: 15px 0;">
+                    <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
+                        <source src="${videoData.url}" type="video/mp4">
+                        متصفحك لا يدعم تشغيل الفيديو.
+                    </video>
+                    <p style="text-align: center; margin-top: 8px;">
+                        <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
+                            <i class="fas fa-external-link-alt"></i> فتح الفيديو
+                        </a>
+                    </p>
+                </div>
+            `;
+        } else if (videoData.type === 'website') {
+            return typeof window.renderWebsiteCardHTML === 'function'
+                ? window.renderWebsiteCardHTML(videoData)
+                : `<a href="${videoData.url}" target="_blank" style="color:#1877f2;">${videoData.url}</a>`;
+        } else {
+            return `
+                <div style="margin: 15px 0; padding: 15px; background: #f0f2f5; border-radius: 12px; text-align: center;">
+                    <i class="fas fa-link" style="font-size: 32px; color: #65676b; margin-bottom: 8px;"></i>
+                    <a href="${videoData.url}" target="_blank" 
+                       style="color: #1877f2; text-decoration: none; word-break: break-all; display: block;">
+                        ${videoData.url}
                     </a>
-                </p>
-            </div>
-        `;
-    } else {
-        return `
-            <div style="margin: 15px 0; padding: 15px; background: #f0f2f5; border-radius: 12px; text-align: center;">
-                <i class="fas fa-video" style="font-size: 40px; color: #65676b; margin-bottom: 10px;"></i>
-                <p style="margin-bottom: 10px; color: #1c1e21; font-weight: 600;">رابط فيديو</p>
-                <a href="${videoData.url}" target="_blank" 
-                   style="color: #1877f2; text-decoration: none; word-break: break-all; display: block;">
-                    ${videoData.url}
-                </a>
-            </div>
-        `;
+                </div>
+            `;
+        }
     }
-}
 
  formatDate(date) {
         const now = new Date();
