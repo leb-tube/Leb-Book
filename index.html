@@ -11435,18 +11435,19 @@ async function fetchHtmlViaProxies(url) {
     const proxies = [
         `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
         `https://api.cors.lol/?url=${encodeURIComponent(url)}`
     ];
 
     for (const proxyUrl of proxies) {
         try {
-            const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 5000); // 5 ثوانٍ بدل 8
+            const res = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(timer);
             if (!res.ok) continue;
             const text = await res.text();
-            if (text && text.length > 200 && /<meta|<title/i.test(text)) {
-                return text;
-            }
+            if (text && text.length > 200 && /<meta|<title/i.test(text)) return text;
         } catch (e) {
             console.warn('Proxy failed:', proxyUrl.split('?')[0], e.message);
         }
@@ -11693,6 +11694,20 @@ async function renderOgInto(container, url, guardFn) {
         if (data && (data.image || data.title)) {
             container.innerHTML = window.buildOgContainerHTML(data);
             window.bindOgImageErrors(container);
+
+            // ✅ إذا لا صورة بعد، حاول جلبها في الخلفية وحدّث البطاقة
+            if (!data.image) {
+                window.fetchOgImageOnly(url).then(imgUrl => {
+                    if (!imgUrl) return;
+                    if (container.dataset.ogUrl !== url) return;
+                    const holder = container.querySelector('.og-img-holder');
+                    if (holder) return; // الصورة ظهرت بالفعل
+                    // أعد بناء البطاقة بالصورة
+                    const newData = { ...data, image: imgUrl };
+                    container.innerHTML = window.buildOgContainerHTML(newData);
+                    window.bindOgImageErrors(container);
+                });
+            }
         } else {
             container.innerHTML = '';
             container.style.display = 'none';
@@ -11702,7 +11717,22 @@ async function renderOgInto(container, url, guardFn) {
         container.style.display = 'none';
     }
 }
-
+// جلب الصورة فقط (بدون انتظار Microlink) — للاستخدام في الخلفية
+window.fetchOgImageOnly = async function (url) {
+    const html = await fetchHtmlViaProxies(url);
+    if (!html) return '';
+    try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const el = doc.querySelector(
+            'meta[property="og:image"], meta[property="og:image:secure_url"], meta[name="twitter:image"], meta[name="twitter:image:src"]'
+        );
+        if (!el) return '';
+        const content = (el.getAttribute('content') || '').trim();
+        if (!content) return '';
+        try { return new URL(content, url).href; }
+        catch (_) { return content; }
+    } catch (e) { return ''; }
+};
 // ---------- 5) صندوق الكتابة ----------
 function syncComposerOg(textareaId, containerId) {
     const textarea = document.getElementById(textareaId);
