@@ -11433,10 +11433,10 @@ window.ogCache = window.ogCache || {};
 // ---------- 0) جلب HTML عبر عدة proxies ----------
 async function fetchHtmlViaProxies(url) {
     const proxies = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-        `https://api.cors.lol/?url=${encodeURIComponent(url)}`
+       `https://corsproxy.io/?url=${encodeURIComponent(url)}`,        // غالباً سريع
+    `https://api.cors.lol/?url=${encodeURIComponent(url)}`,        // سريع
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, // بطيء
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` // بطيء
     ];
 
     for (const proxyUrl of proxies) {
