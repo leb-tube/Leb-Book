@@ -6735,26 +6735,23 @@ stopAllMedia() {
             ${processedContent}
         </div>
         ${mediaContent}
-        <div class="post-actions">
-            <button class="action-btn ${post.likes?.includes(window.authSystem?.currentUser?.uid) ? 'liked' : ''}" 
-                    data-like-btn="${postId}" onclick="window.toggleUnifiedLike('${postId}', this)"
-                    style="${post.likes?.includes(window.authSystem?.currentUser?.uid) ? 'color:#1877f2;' : ''}">
-                <i class="${post.likes?.includes(window.authSystem?.currentUser?.uid) ? 'fas' : 'far'} fa-thumbs-up"></i>
-                <span>أعجبني (<span data-like-count="${postId}">${post.likes?.length || 0}</span>)</span>
+       <button class="action-btn" onclick="likePost('${postId}')">
+                <i class="far fa-thumbs-up"></i>
+                <span>أعجبني (${post.likes?.length || 0})</span>
             </button>
-            <button class="action-btn" onclick="window.focusUnifiedComment('${postId}')">
+            <button class="action-btn" onclick="commentOnPost('${postId}')">
                 <i class="far fa-comment"></i>
-                <span>تعليق (<span data-comment-count="${postId}">${post.comments?.length || 0}</span>)</span>
+                <span>تعليق (${post.comments?.length || 0})</span>
             </button>
-            <button class="action-btn" onclick="window.shareUnifiedPost('${postId}')">
+            <button class="action-btn" onclick="sharePost('${postId}')">
                 <i class="fas fa-share"></i>
-                <span>مشاركة (<span data-share-count="${postId}">${post.shares || 0}</span>)</span>
+                <span>مشاركة (${post.shares || 0})</span>
             </button>
         </div>
-        ${renderPostCommentsSection(post, postId)}
+    `;
 
-
-
+    return div;
+}
     createMediaContent(post) {
         if (post.imageUrl) {
             return `<img src="${post.imageUrl}" alt="صورة المنشور" class="post-image lazyload" 
