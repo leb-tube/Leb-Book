@@ -11449,7 +11449,7 @@ try {
 // المحاولة 2: Microlink مع مفتاح (إذا فشلت الأولى أو لم تُرجع صورة)
 if (!json || json.status !== 'success' || !json.data || !json.data.image) {
     const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS'; // ضع مفتاحك هنا
-    if (MICROLINK_KEY && MICROLINK_KEY !== '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS') {
+    if (MICROLINK_KEY && MICROLINK_KEY !== 'YOUR_MICROLINK_KEY') {
         try {
             const res2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`, {
                 headers: { 'x-api-key': MICROLINK_KEY }
