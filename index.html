@@ -11424,8 +11424,9 @@ window.confirmDeletePost = window.executeInstantDelete;
 window.confirmDeletePublicPost = window.executeInstantDelete;
 window.deletePost = window.executeInstantDelete;
 window.deletePublicPost = window.executeInstantDelete;
-// ============================================================
+ // ============================================================
 // نظام جلب معاينة المواقع (OG Fetch) — نسخة نهائية كاملة
+// تدعم صفحة posts وصفحة public
 // ============================================================
 
 window.ogCache = window.ogCache || {};
@@ -11433,16 +11434,16 @@ window.ogCache = window.ogCache || {};
 // ---------- 0) جلب HTML عبر عدة proxies ----------
 async function fetchHtmlViaProxies(url) {
     const proxies = [
-       `https://corsproxy.io/?url=${encodeURIComponent(url)}`,        // غالباً سريع
-    `https://api.cors.lol/?url=${encodeURIComponent(url)}`,        // سريع
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, // بطيء
-    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` // بطيء
+        `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+        `https://api.cors.lol/?url=${encodeURIComponent(url)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
     ];
 
     for (const proxyUrl of proxies) {
         try {
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 5000); // 5 ثوانٍ بدل 8
+            const timer = setTimeout(() => controller.abort(), 5000);
             const res = await fetch(proxyUrl, { signal: controller.signal });
             clearTimeout(timer);
             if (!res.ok) continue;
@@ -11479,7 +11480,7 @@ window.fetchOgFromUrl = async function (rawUrl) {
 
     // المحاولة 2: Microlink مع مفتاح (فقط إذا لا صورة)
     if (!hasImage) {
-        const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS'; // ضع مفتاحك هنا إن أردت
+        const MICROLINK_KEY = '26GclDwn3L4RikKyWzuZw3pIWtQZ9Tsx8tEqmNoS';
         if (MICROLINK_KEY && MICROLINK_KEY !== 'YOUR_MICROLINK_KEY') {
             try {
                 const res2 = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`, {
@@ -11659,7 +11660,6 @@ window.__ogImgFail = function (imgEl, proxiedUrl) {
 window.bindOgImageErrors = function (root) {
     (root || document).querySelectorAll('img.og-thumb:not([data-bound])').forEach(img => {
         img.dataset.bound = '1';
-        // إذا فشلت الصورة قبل الربط
         if (img.complete && img.naturalWidth === 0) {
             window.__ogImgFail(img, img.dataset.proxy || '');
             return;
@@ -11701,8 +11701,7 @@ async function renderOgInto(container, url, guardFn) {
                     if (!imgUrl) return;
                     if (container.dataset.ogUrl !== url) return;
                     const holder = container.querySelector('.og-img-holder');
-                    if (holder) return; // الصورة ظهرت بالفعل
-                    // أعد بناء البطاقة بالصورة
+                    if (holder) return;
                     const newData = { ...data, image: imgUrl };
                     container.innerHTML = window.buildOgContainerHTML(newData);
                     window.bindOgImageErrors(container);
@@ -11717,7 +11716,8 @@ async function renderOgInto(container, url, guardFn) {
         container.style.display = 'none';
     }
 }
-// جلب الصورة فقط (بدون انتظار Microlink) — للاستخدام في الخلفية
+
+// جلب الصورة فقط (بدون انتظار Microlink)
 window.fetchOgImageOnly = async function (url) {
     const html = await fetchHtmlViaProxies(url);
     if (!html) return '';
@@ -11733,6 +11733,7 @@ window.fetchOgImageOnly = async function (url) {
         catch (_) { return content; }
     } catch (e) { return ''; }
 };
+
 // ---------- 5) صندوق الكتابة ----------
 function syncComposerOg(textareaId, containerId) {
     const textarea = document.getElementById(textareaId);
@@ -11759,7 +11760,7 @@ function syncComposerOg(textareaId, containerId) {
     renderOgInto(container, url, () => (textarea.value || '').includes(url));
 }
 
-// ---------- 6) معالجة بطاقة منشور واحدة ----------
+// ---------- 6) معالجة بطاقة منشور واحدة (posts + public) ----------
 function processPostCard(card) {
     if (!card || card.dataset.ogDone === 'true') return;
     if (card.dataset.ogProcessing === 'true') return;
@@ -11769,19 +11770,27 @@ function processPostCard(card) {
         return;
     }
 
+    // محتوى المنشور: كلاسات posts أولاً، ثم public
     const contentEl = card.querySelector(
-        '.posts, .public, .post-content, .public-post-content, .post-text, .post-body, .post-caption, .post-description'
+        '.posts, .public, .post-content, .public-post-content, ' +
+        '.post-text, .post-body, .post-caption, .post-description, ' +
+        '.public-post-text, .public-post-body, .public-post-caption, .public-post-description'
     );
     const scope = contentEl || card;
 
     let foundUrl = '';
+
+    // ابحث عن روابط خارجية حقيقية فقط
     const anchors = scope.querySelectorAll('a[href^="http"]');
     for (const a of anchors) {
+        // تجاهل روابط القوائم والأزرار
+        if (a.closest('.post-menu, .public-post-options-menu, .post-actions, .public-post-actions')) continue;
+        if (a.closest('.post-og-container')) continue;
         const href = a.getAttribute('href') || '';
-        if (href && !isYouTube(href) && !a.closest('.post-og-container')) {
-            foundUrl = href; break;
-        }
+        if (href && !isYouTube(href)) { foundUrl = href; break; }
     }
+
+    // إذا لم نجد رابطاً في <a>، ابحث في النص
     if (!foundUrl) {
         const txt = scope.innerText || scope.textContent || '';
         const m = txt.match(/https?:\/\/[^\s"'<>]+/);
@@ -11799,6 +11808,7 @@ function processPostCard(card) {
     ogWrapper.className = 'post-og-container';
     ogWrapper.style.margin = '10px 0';
 
+    // شريط الإجراءات: posts أو public
     const actionsBar = card.querySelector('.post-actions, .public-post-actions');
     if (actionsBar) actionsBar.insertAdjacentElement('beforebegin', ogWrapper);
     else card.appendChild(ogWrapper);
@@ -11810,29 +11820,42 @@ function processPostCard(card) {
         });
 }
 
+// ---------- 7) محددات البطاقات الموحّدة ----------
+const POST_SEL = '.post-card, .public-post-card, .post, .feed-post, .post-item, .public-post-item';
+
 function scanAllPosts(root) {
-    const sel = '.post-card, .public-post-card, .post, .feed-post, .post-item';
-    (root || document).querySelectorAll(sel).forEach(processPostCard);
+    (root || document).querySelectorAll(POST_SEL).forEach(processPostCard);
 }
 
-// ---------- 7) MutationObserver ----------
+// ---------- 8) MutationObserver ----------
 const ogObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
         for (const node of m.addedNodes) {
             if (node.nodeType !== 1) continue;
-            if (node.matches && node.matches('.post-card, .public-post-card, .post, .feed-post, .post-item')) {
+            if (node.matches && node.matches(POST_SEL)) {
                 processPostCard(node);
             }
             if (node.querySelectorAll) {
-                node.querySelectorAll('.post-card, .public-post-card, .post, .feed-post, .post-item')
-                    .forEach(processPostCard);
+                node.querySelectorAll(POST_SEL).forEach(processPostCard);
             }
         }
     }
 });
 ogObserver.observe(document.body, { childList: true, subtree: true });
 
-// ---------- 8) شبكة أمان دورية ----------
+// ---------- 9) إعادة تعيين عند تبديل الصفحات ----------
+document.querySelectorAll('[data-page]').forEach(nav => {
+    nav.addEventListener('click', () => {
+        document.querySelectorAll('.post-og-container').forEach(el => el.remove());
+        document.querySelectorAll('[data-og-done], [data-og-processing]').forEach(c => {
+            delete c.dataset.ogDone;
+            delete c.dataset.ogProcessing;
+        });
+        setTimeout(() => scanAllPosts(document), 400);
+    });
+});
+
+// ---------- 10) شبكة أمان دورية ----------
 setInterval(() => {
     try { syncComposerOg('postContent', 'mainOgPreviewContainer'); } catch (e) {}
     try { syncComposerOg('publicPostContent', 'publicOgPreviewContainer'); } catch (e) {}
