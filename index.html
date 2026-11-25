@@ -11439,7 +11439,7 @@ window.fetchOgFromUrl = async function (rawUrl) {
 
     const resultData = { url, domain, title: domain, description: '', image: '' };
 
-    // المحاولة 1: Microlink (الرابط الصحيح)
+    // المحاولة 1: Microlink
     try {
         const res = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
         const json = await res.json();
@@ -11454,7 +11454,7 @@ window.fetchOgFromUrl = async function (rawUrl) {
         }
     } catch (e) { console.warn('Microlink fail:', e); }
 
-    // المحاولة 2: AllOrigins (الرابط الصحيح)
+    // المحاولة 2: AllOrigins
     if (!resultData.image) {
         try {
             const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
@@ -11500,23 +11500,17 @@ window.buildOgContainerHTML = function (data) {
         const proxied = 'https://images.weserv.nl/?url=' +
             encodeURIComponent(String(data.image).replace(/^https?:\/\//, ''));
 
-        // لا onerror هنا إطلاقاً — نضع الروابط في data-attributes فقط
-        let imageBlock = '';
-if (data.image) {
-    const proxied = 'https://images.weserv.nl/?url=' +
-        encodeURIComponent(String(data.image).replace(/^https?:\/\//, ''));
-
-    imageBlock = `
-        <div class="og-img-holder"
-             style="width:100%; height:200px; overflow:hidden; background:#f0f2f5;
-                    display:flex; align-items:center; justify-content:center;">
-            <img class="og-thumb" src="${esc(data.image)}" alt=""
-                 referrerpolicy="no-referrer" loading="lazy"
-                 data-proxy="${esc(proxied)}"
-                 style="max-width:100%; max-height:100%; width:auto; height:auto;
-                        object-fit:contain; display:block; margin:0 auto;">
-        </div>`;
-}
+        imageBlock = `
+            <div class="og-img-holder"
+                 style="width:100%; height:200px; overflow:hidden; background:#f0f2f5;
+                        display:flex; align-items:center; justify-content:center;">
+                <img class="og-thumb" src="${esc(data.image)}" alt=""
+                     referrerpolicy="no-referrer" loading="lazy"
+                     data-proxy="${esc(proxied)}"
+                     style="max-width:100%; max-height:100%; width:auto; height:auto;
+                            object-fit:contain; display:block; margin:0 auto;">
+            </div>`;
+    }
 
     return `
         <a href="${esc(data.url)}" target="_blank" rel="noopener noreferrer"
@@ -11535,22 +11529,43 @@ if (data.image) {
         </a>`;
 };
 
-// ---------- 3) مراقب صندوق الكتابة ----------
- // ============================================================
-// إدارة معاينة OG — نسخة تُبقي البطاقة بعد النشر
-// ============================================================
+// ---------- 2.5) معالجة فشل الصور (بدون onerror في HTML) ----------
+window.__ogImgFail = function (imgEl, proxiedUrl) {
+    imgEl.onerror = null;
+    if (!imgEl.dataset.triedProxy && proxiedUrl) {
+        imgEl.dataset.triedProxy = '1';
+        imgEl.src = proxiedUrl;
+        return;
+    }
+    const holder = imgEl.parentElement;
+    if (holder) {
+        holder.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:center;' +
+            'width:100%;height:100%;background:#e7f3ff;color:#1877f2;font-size:34px;">' +
+            '<i class="fas fa-image"></i></div>';
+    }
+};
 
-// ---------- استخراج أول رابط ----------
+window.bindOgImageErrors = function (root) {
+    (root || document).querySelectorAll('img.og-thumb:not([data-bound])').forEach(img => {
+        img.dataset.bound = '1';
+        img.addEventListener('error', function () {
+            window.__ogImgFail(this, this.dataset.proxy || '');
+        });
+    });
+};
+
+// ---------- 3) أدوات مساعدة ----------
 function extractFirstUrl(text) {
     const m = String(text || '').match(/https?:\/\/[^\s"'<>]+/);
     return (m && m[0]) ? m[0] : '';
 }
 function isYouTube(u) { return /youtube\.com|youtu\.be/i.test(u); }
 
-// ---------- رسم البطاقة في حاوية ----------
+// ---------- 4) رسم البطاقة في حاوية ----------
 async function renderOgInto(container, url, guardFn) {
     if (!container || !url) return;
-    if (container.dataset.ogUrl === url) return;        // نفس الرابط، لا تعيد
+    if (container.dataset.ogUrl === url) return;
     container.dataset.ogUrl = url;
     container.style.display = 'block';
     container.innerHTML =
@@ -11559,11 +11574,11 @@ async function renderOgInto(container, url, guardFn) {
 
     try {
         const data = await window.fetchOgFromUrl(url);
-        // تحقق أن الرابط لا يزال موجوداً في المصدر (منع التحديث الخاطئ)
         if (guardFn && !guardFn()) return;
         if (container.dataset.ogUrl !== url) return;
         if (data && (data.image || data.title)) {
             container.innerHTML = window.buildOgContainerHTML(data);
+            window.bindOgImageErrors(container);   // ✅ اربط onerror برمجياً
         } else {
             container.innerHTML = '';
             container.style.display = 'none';
@@ -11574,7 +11589,7 @@ async function renderOgInto(container, url, guardFn) {
     }
 }
 
-// ---------- صندوق الكتابة ----------
+// ---------- 5) صندوق الكتابة ----------
 function syncComposerOg(textareaId, containerId) {
     const textarea = document.getElementById(textareaId);
     if (!textarea) return;
@@ -11600,18 +11615,16 @@ function syncComposerOg(textareaId, containerId) {
     renderOgInto(container, url, () => (textarea.value || '').includes(url));
 }
 
-// ---------- معالجة بطاقة منشور واحدة ----------
+// ---------- 6) معالجة بطاقة منشور واحدة ----------
 function processPostCard(card) {
     if (!card || card.dataset.ogDone === 'true') return;
     if (card.dataset.ogProcessing === 'true') return;
 
-    // موجودة مسبقاً؟
     if (card.querySelector(':scope > .post-og-container')) {
         card.dataset.ogDone = 'true';
         return;
     }
 
-    // ابحث عن الرابط في محتوى المنشور
     const contentEl = card.querySelector(
         '.post-content, .public-post-content, .post-text, .post-body, .post-caption, .post-description'
     );
@@ -11658,16 +11671,14 @@ function scanAllPosts(root) {
     (root || document).querySelectorAll(sel).forEach(processPostCard);
 }
 
-// ---------- MutationObserver: يمسك المنشورات الجديدة فوراً ----------
+// ---------- 7) MutationObserver ----------
 const ogObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
         for (const node of m.addedNodes) {
             if (node.nodeType !== 1) continue;
-            // إن كانت البطاقة نفسها
             if (node.matches && node.matches('.post-card, .public-post-card, .post, .feed-post, .post-item')) {
                 processPostCard(node);
             }
-            // أو تحوي بطاقات
             if (node.querySelectorAll) {
                 node.querySelectorAll('.post-card, .public-post-card, .post, .feed-post, .post-item')
                     .forEach(processPostCard);
@@ -11677,12 +11688,13 @@ const ogObserver = new MutationObserver((mutations) => {
 });
 ogObserver.observe(document.body, { childList: true, subtree: true });
 
-// ---------- شبكة أمان: فحص دوري أقل تواتراً ----------
+// ---------- 8) شبكة أمان دورية ----------
 setInterval(() => {
     try { syncComposerOg('postContent', 'mainOgPreviewContainer'); } catch (e) {}
     try { syncComposerOg('publicPostContent', 'publicOgPreviewContainer'); } catch (e) {}
     try { scanAllPosts(document); } catch (e) {}
-}, 1500);
+    try { window.bindOgImageErrors(document); } catch (e) {}   // ✅ ربط أي صور جديدة
+}, 1500); 
 
  </script>
  
