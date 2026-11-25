@@ -11425,134 +11425,188 @@ window.confirmDeletePublicPost = window.executeInstantDelete;
 window.deletePost = window.executeInstantDelete;
 window.deletePublicPost = window.executeInstantDelete;
 // ============================================================
-// نظام حاويات معاينة المواقع (OG Containers) التلقائي
+// نظام جلب معاينة المواقع (Fetch OG Image & Metadata) المطور
 // ============================================================
 
 window.ogCache = window.ogCache || {};
 
-// 1. جلب بيانات الموقع (صورة + عنوان + وصف) مع تخزين مؤقت لمنع تكرار الطلبات
-window.getWebsiteOgData = async function(url) {
+// 1. دالة Fetch لجلب og:image و og:title مباشرة من الصفحة
+window.fetchOgFromUrl = async function(rawUrl) {
+    const url = String(rawUrl).trim();
     if (window.ogCache[url]) return window.ogCache[url];
 
     let domain = url;
     try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) {}
 
-    try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`https://microlink.io{encodeURIComponent(url)}`, { signal: controller.signal });
-        clearTimeout(timer);
+    let resultData = {
+        url: url,
+        domain: domain,
+        title: domain,
+        description: '',
+        image: ''
+    };
 
+    try {
+        // المحاولة الأولى: جلب بيانات Open Graph عبر Microlink
+        const res = await fetch(`https://microlink.io{encodeURIComponent(url)}`);
         const json = await res.json();
         if (json.status === 'success' && json.data) {
-            const img = (json.data.image && json.data.image.url) ||
-                        (json.data.logo && json.data.logo.url) ||
-                        `https://google.com{domain}&sz=128`;
-            const data = {
-                url,
-                domain,
-                title: json.data.title || domain,
-                description: json.data.description || '',
-                image: img
-            };
-            window.ogCache[url] = data;
-            return data;
+            resultData.title = json.data.title || domain;
+            resultData.description = json.data.description || '';
+            resultData.image = (json.data.image && json.data.image.url) || '';
         }
     } catch (e) {}
 
-    const fallback = {
-        url,
-        domain,
-        title: domain,
-        description: url,
-        image: `https://google.com{domain}&sz=128`
-    };
-    window.ogCache[url] = fallback;
-    return fallback;
+    // المحاولة الثانية (Fetch مباشر لـ HTML الصفحة واستخراج og:image يدوياً إذا لم تنجح الأولى)
+    if (!resultData.image) {
+        try {
+            const proxyRes = await fetch(`https://allorigins.win{encodeURIComponent(url)}`);
+            const proxyJson = await proxyRes.json();
+            if (proxyJson && proxyJson.contents) {
+                const doc = new DOMParser().parseFromString(proxyJson.contents, 'text/html');
+                const ogImg = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
+                const ogTitle = doc.querySelector('meta[property="og:title"], title');
+                const ogDesc = doc.querySelector('meta[property="og:description"], meta[name="description"]');
+
+                if (ogImg && ogImg.getAttribute('content')) {
+                    // تحويل الرابط النسبي للصورة إلى رابط كامل إن لزم الأمر
+                    resultData.image = new URL(ogImg.getAttribute('content'), url).href;
+                }
+                if (ogTitle) {
+                    resultData.title = ogTitle.getAttribute('content') || ogTitle.textContent || resultData.title;
+                }
+                if (ogDesc && ogDesc.getAttribute('content')) {
+                    resultData.description = ogDesc.getAttribute('content');
+                }
+            }
+        } catch (e) {}
+    }
+
+    window.ogCache[url] = resultData;
+    return resultData;
 };
 
-// 2. بناء HTML لكونتينر صورة الموقع وبياناته
+// 2. بناء بطاقة الموقع بدون أي صورة مكسورة أبداً
 window.buildOgContainerHTML = function(data) {
-    const isIcon = data.image && data.image.includes('://google.com');
-    const mediaHTML = data.image
-        ? (isIcon
-            ? `<div style="padding:18px; background:#e7f3ff; display:flex; align-items:center; justify-content:center;">
-                   <img src="${data.image}" alt="${data.domain}" style="width:52px; height:52px; border-radius:10px;">
-               </div>`
-            : `<div style="width:100%; height:230px; overflow:hidden; background:#e4e6eb;">
-                   <img src="${data.image}" alt="${data.title}" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.parentElement.style.display='none'">
-               </div>`)
+    // إذا وُجدت صورة og:image نعرضها، وإذا فشلت في التحميل نحذف حاوية الصورة فوراً ونُظهر شريطاً أنيقاً
+    const imageBlock = data.image
+        ? `<div class="og-img-holder" style="width:100%; max-height:240px; overflow:hidden; background:#f0f2f5;">
+               <img src="${data.image}" alt="" 
+                    style="width:100%; height:100%; object-fit:cover; display:block;"
+                    onerror="this.parentElement.remove();">
+           </div>`
         : '';
 
     return `
         <a href="${data.url}" target="_blank" rel="noopener noreferrer" 
-           style="display:block; border:1px solid #dadde1; border-radius:12px; overflow:hidden; background:#f7f8fa; text-decoration:none; color:inherit; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-            ${mediaHTML}
-            <div style="padding:12px 15px; text-align:right; border-top:1px solid #e4e6eb;">
-                <div style="font-size:11px; color:#65676b; font-weight:600; text-transform:uppercase; margin-bottom:4px;">${data.domain}</div>
-                <div style="font-size:15px; font-weight:700; color:#050505; margin-bottom:5px; line-height:1.35;">${data.title}</div>
-                ${data.description ? `<div style="font-size:13px; color:#65676b; line-height:1.45; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${data.description}</div>` : ''}
+           style="display:block; border:1px solid #dadde1; border-radius:12px; overflow:hidden; background:#f7f8fa; text-decoration:none; color:inherit; margin-top:8px;">
+            ${imageBlock}
+            <div style="padding:12px 15px; text-align:right; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <div style="flex:1; min-width:0;">
+                    <div style="font-size:11px; color:#65676b; font-weight:700; text-transform:uppercase; margin-bottom:3px;">${data.domain}</div>
+                    <div style="font-size:15px; font-weight:700; color:#050505; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${data.title}</div>
+                    ${data.description ? `<div style="font-size:13px; color:#65676b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${data.description}</div>` : ''}
+                </div>
+                <div style="width:42px; height:42px; border-radius:10px; background:#e7f3ff; color:#1877f2; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                    <i class="fas fa-globe" style="font-size:20px;"></i>
+                </div>
             </div>
         </a>
     `;
 };
 
-// 3. ربط مربعات الكتابة بكونتينرات المعاينة
-function bindComposerOgContainer(textareaId, containerId) {
+// 3. مراقبة مربعات الكتابة (مع إخفاء الحاوية تلقائياً فور إفراغ النص بعد النشر!)
+function syncComposerOg(textareaId, containerId) {
     const textarea = document.getElementById(textareaId);
     const container = document.getElementById(containerId);
-    if (!textarea || !container || textarea.dataset.ogBound) return;
-    textarea.dataset.ogBound = 'true';
+    if (!textarea || !container) return;
 
-    let timer = null;
-    textarea.addEventListener('input', () => {
-        clearTimeout(timer);
-        timer = setTimeout(async () => {
-            const match = (textarea.value || '').match(/(https?:\/\/[^\s]+)/);
-            if (!match || match[0].includes('youtube.com') || match[0].includes('youtu.be')) {
-                container.style.display = 'none';
-                container.innerHTML = '';
-                return;
-            }
-            container.style.display = 'block';
-            container.innerHTML = '<div style="padding:12px; text-align:center; color:#1877f2; font-size:13px; background:#f0f2f5; border-radius:10px;"><i class="fas fa-spinner fa-spin"></i> جاري تحميل صورة وبيانات الموقع...</div>';
-            const data = await window.getWebsiteOgData(match[0]);
+    const currentText = (textarea.value || '').trim();
+
+    // ✅ إذا فرغ مربع النص (بعد النشر مثلاً)، أخفِ الحاوية فوراً
+    if (!currentText) {
+        if (container.style.display !== 'none') {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            delete textarea.dataset.lastOgUrl;
+        }
+        return;
+    }
+
+    const match = currentText.match(/(https?:\/\/[^\s]+)/);
+    const url = match ? match : '';
+
+    if (!url || url.includes('youtube.com') || url.includes('youtu.be')) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        delete textarea.dataset.lastOgUrl;
+        return;
+    }
+
+    // لا تعد الجلب إذا كان نفس الرابط معروضاً بالفعل
+    if (textarea.dataset.lastOgUrl === url) return;
+    textarea.dataset.lastOgUrl = url;
+
+    container.style.display = 'block';
+    container.innerHTML = '<div style="padding:10px; text-align:center; color:#1877f2; font-size:13px; background:#f0f2f5; border-radius:10px;"><i class="fas fa-spinner fa-spin"></i> جاري جلب معاينة الرابط...</div>';
+
+    window.fetchOgFromUrl(url).then(data => {
+        if ((textarea.value || '').includes(url)) {
             container.innerHTML = window.buildOgContainerHTML(data);
-        }, 500);
+        }
     });
 }
 
-// 4. حقن كونتينر صورة الموقع تلقائياً داخل أي منشور منشور يحتوي نصه على رابط!
+// 4. فحص المنشورات المنشورة في الصفحة وإضافة بطاقة OG لها تلقائياً
 async function hydratePublishedPostsOg() {
-    const postCards = document.querySelectorAll('.post-card, .public-post-card');
-    for (const card of postCards) {
-        if (card.dataset.ogChecked === 'true') continue;
-        card.dataset.ogChecked = 'true';
+    const cards = document.querySelectorAll('.post-card, .public-post-card');
+    for (const card of cards) {
+        if (card.dataset.ogDone === 'true') continue;
 
-        // استخراج النص من محتوى المنشور
-        const textEl = card.querySelector('.post-content, .public-post-content, div[style*="line-height:1.6"], div[style*="line-height: 1.6"]');
-        if (!textEl) continue;
+        // البحث عن أي رابط خارجي داخل نص المنشور (سواء كان وسم <a> أو نصاً عادياً)
+        let foundUrl = '';
+        const links = card.querySelectorAll('a[href^="http"]');
+        for (const a of links) {
+            const href = a.getAttribute('href') || '';
+            if (!href.includes('youtube.com') && !href.includes('youtu.be') && !a.closest('.unified-comments-wrapper')) {
+                foundUrl = href;
+                break;
+            }
+        }
 
-        const match = (textEl.innerText || textEl.textContent || '').match(/(https?:\/\/[^\s]+)/);
-        if (!match || match[0].includes('youtube.com') || match[0].includes('youtu.be')) continue;
+        if (!foundUrl) {
+            const textMatch = (card.innerText || '').match(/(https?:\/\/[^\s]+)/);
+            if (textMatch && !textMatch.includes('youtube.com') && !textMatch.includes('youtu.be')) {
+                foundUrl = textMatch;
+            }
+        }
 
-        // إنشاء كونتينر مخصص لصورة الموقع داخل بطاقة المنشور
-        const ogContainer = document.createElement('div');
-        ogContainer.className = 'post-og-container';
-        ogContainer.style.cssText = 'margin: 12px 0;';
-        textEl.insertAdjacentElement('afterend', ogContainer);
+        card.dataset.ogDone = 'true';
+        if (!foundUrl) continue;
 
-        const data = await window.getWebsiteOgData(match[0]);
-        ogContainer.innerHTML = window.buildOgContainerHTML(data);
+        // وضع البطاقة قبل شريط الأزرار (.post-actions أو .public-post-actions)
+        const actionsBar = card.querySelector('.post-actions, .public-post-actions');
+        const ogWrapper = document.createElement('div');
+        ogWrapper.className = 'post-og-container';
+        ogWrapper.style.margin = '10px 0';
+
+        if (actionsBar) {
+            actionsBar.insertAdjacentElement('beforebegin', ogWrapper);
+        } else {
+            card.appendChild(ogWrapper);
+        }
+
+        const data = await window.fetchOgFromUrl(foundUrl);
+        ogWrapper.innerHTML = window.buildOgContainerHTML(data);
     }
 }
 
-// تشغيل المراقبة الدورية لصناديق الكتابة والمنشورات المعروضة
+// تشغيل المزامنة المستمرة كل 800 مللي ثانية
 setInterval(() => {
-    bindComposerOgContainer('postContent', 'mainOgPreviewContainer');
-    bindComposerOgContainer('publicPostContent', 'publicOgPreviewContainer');
+    syncComposerOg('postContent', 'mainOgPreviewContainer');
+    syncComposerOg('publicPostContent', 'publicOgPreviewContainer');
     hydratePublishedPostsOg();
-}, 1200);
+}, 800);
 
 
  </script>
