@@ -6769,53 +6769,53 @@ stopAllMedia() {
         }
         return '';
     }
-    createVideoEmbed(videoData) {
-        if (!videoData) return '';
+   createVideoEmbed(videoData) {
+    if (!videoData) return '';
 
-        if (videoData.type === 'youtube' && videoData.id) {
-            return `
-                <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
-                     style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://ytimg.com{videoData.id}/hqdefault.jpg'), url('https://ytimg.com{videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
-                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
-                        <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
-                    </div>
+    if (videoData.type === 'youtube' && videoData.id) {
+        return `
+            <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
+                 style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://img.youtube.com/vi/${videoData.id}/hqdefault.jpg'), url('https://img.youtube.com/vi/${videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+                    <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
                 </div>
-                <p style="text-align: center; margin-top: 8px; color: #65676b;">
+            </div>
+            <p style="text-align: center; margin-top: 8px; color: #65676b;">
+                <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
+                    <i class="fab fa-youtube"></i> مشاهدة على YouTube
+                </a>
+            </p>
+        `;
+    } else if (videoData.type === 'direct') {
+        return `
+            <div style="margin: 15px 0;">
+                <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
+                    <source src="${videoData.url}" type="video/mp4">
+                    متصفحك لا يدعم تشغيل الفيديو.
+                </video>
+                <p style="text-align: center; margin-top: 8px;">
                     <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
-                        <i class="fab fa-youtube"></i> مشاهدة على YouTube
+                        <i class="fas fa-external-link-alt"></i> فتح الفيديو
                     </a>
                 </p>
-            `;
-        } else if (videoData.type === 'direct') {
-            return `
-                <div style="margin: 15px 0;">
-                    <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
-                        <source src="${videoData.url}" type="video/mp4">
-                        متصفحك لا يدعم تشغيل الفيديو.
-                    </video>
-                    <p style="text-align: center; margin-top: 8px;">
-                        <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
-                            <i class="fas fa-external-link-alt"></i> فتح الفيديو
-                        </a>
-                    </p>
-                </div>
-            `;
-        } else if (videoData.type === 'website') {
-            return typeof window.renderWebsiteCardHTML === 'function'
-                ? window.renderWebsiteCardHTML(videoData)
-                : `<a href="${videoData.url}" target="_blank" style="color:#1877f2;">${videoData.url}</a>`;
-        } else {
-            return `
-                <div style="margin: 15px 0; padding: 15px; background: #f0f2f5; border-radius: 12px; text-align: center;">
-                    <i class="fas fa-link" style="font-size: 32px; color: #65676b; margin-bottom: 8px;"></i>
-                    <a href="${videoData.url}" target="_blank" 
-                       style="color: #1877f2; text-decoration: none; word-break: break-all; display: block;">
-                        ${videoData.url}
-                    </a>
-                </div>
-            `;
-        }
+            </div>
+        `;
+    } else if (videoData.type === 'website') {
+        return typeof window.renderWebsiteCardHTML === 'function'
+            ? window.renderWebsiteCardHTML(videoData)
+            : `<a href="${videoData.url}" target="_blank" style="color:#1877f2;">${videoData.url}</a>`;
+    } else {
+        return `
+            <div style="margin: 15px 0; padding: 15px; background: #f0f2f5; border-radius: 12px; text-align: center;">
+                <i class="fas fa-link" style="font-size: 32px; color: #65676b; margin-bottom: 8px;"></i>
+                <a href="${videoData.url}" target="_blank" 
+                   style="color: #1877f2; text-decoration: none; word-break: break-all; display: block;">
+                    ${videoData.url}
+                </a>
+            </div>
+        `;
     }
+}
 
 
     createPostMenu(postId) {
@@ -9120,52 +9120,52 @@ const processedContent = this.processPostContent(post.content);
     return div;
 }
 createVideoEmbedForPublic(videoData) {
-   if (!videoData) return '';
+    if (!videoData) return '';
 
-        if (videoData.type === 'youtube' && videoData.id) {
-            return `
-                <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
-                     style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://ytimg.com{videoData.id}/hqdefault.jpg'), url('https://ytimg.com{videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
-                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
-                        <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
-                    </div>
+    if (videoData.type === 'youtube' && videoData.id) {
+        return `
+            <div class="yt-box" data-id="${videoData.id}" onclick="startYouTubeVideo(this)"
+                 style="margin: 15px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background-color: #18191a; background-image: url('https://img.youtube.com/vi/${videoData.id}/hqdefault.jpg'), url('https://img.youtube.com/vi/${videoData.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 44px; background: #ff0000; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+                    <i class="fas fa-play" style="color: white; font-size: 20px; margin-left: 3px;"></i>
                 </div>
-                <p style="text-align: center; margin-top: 8px; color: #65676b;">
+            </div>
+            <p style="text-align: center; margin-top: 8px; color: #65676b;">
+                <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
+                    <i class="fab fa-youtube"></i> مشاهدة على YouTube
+                </a>
+            </p>
+        `;
+    } else if (videoData.type === 'direct') {
+        return `
+            <div style="margin: 15px 0;">
+                <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
+                    <source src="${videoData.url}" type="video/mp4">
+                    متصفحك لا يدعم تشغيل الفيديو.
+                </video>
+                <p style="text-align: center; margin-top: 8px;">
                     <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
-                        <i class="fab fa-youtube"></i> مشاهدة على YouTube
+                        <i class="fas fa-external-link-alt"></i> فتح الفيديو
                     </a>
                 </p>
-            `;
-        } else if (videoData.type === 'direct') {
-            return `
-                <div style="margin: 15px 0;">
-                    <video controls preload="metadata" style="width: 100%; max-height: 400px; border-radius: 12px; background: #000;">
-                        <source src="${videoData.url}" type="video/mp4">
-                        متصفحك لا يدعم تشغيل الفيديو.
-                    </video>
-                    <p style="text-align: center; margin-top: 8px;">
-                        <a href="${videoData.url}" target="_blank" style="color: #1877f2; text-decoration: none;">
-                            <i class="fas fa-external-link-alt"></i> فتح الفيديو
-                        </a>
-                    </p>
-                </div>
-            `;
-        } else if (videoData.type === 'website') {
-            return typeof window.renderWebsiteCardHTML === 'function'
-                ? window.renderWebsiteCardHTML(videoData)
-                : `<a href="${videoData.url}" target="_blank" style="color:#1877f2;">${videoData.url}</a>`;
-        } else {
-            return `
-                <div style="margin: 15px 0; padding: 15px; background: #f0f2f5; border-radius: 12px; text-align: center;">
-                    <i class="fas fa-link" style="font-size: 32px; color: #65676b; margin-bottom: 8px;"></i>
-                    <a href="${videoData.url}" target="_blank" 
-                       style="color: #1877f2; text-decoration: none; word-break: break-all; display: block;">
-                        ${videoData.url}
-                    </a>
-                </div>
-            `;
-        }
+            </div>
+        `;
+    } else if (videoData.type === 'website') {
+        return typeof window.renderWebsiteCardHTML === 'function'
+            ? window.renderWebsiteCardHTML(videoData)
+            : `<a href="${videoData.url}" target="_blank" style="color:#1877f2;">${videoData.url}</a>`;
+    } else {
+        return `
+            <div style="margin: 15px 0; padding: 15px; background: #f0f2f5; border-radius: 12px; text-align: center;">
+                <i class="fas fa-link" style="font-size: 32px; color: #65676b; margin-bottom: 8px;"></i>
+                <a href="${videoData.url}" target="_blank" 
+                   style="color: #1877f2; text-decoration: none; word-break: break-all; display: block;">
+                    ${videoData.url}
+                </a>
+            </div>
+        `;
     }
+}
 
  formatDate(date) {
         const now = new Date();
@@ -10801,8 +10801,7 @@ window.loadFriendPosts = async function(friendId) {
             const authorName = post.authorName || post.userName || (currentFriendData && currentFriendData.name) || 'مستخدم';
             const authorPhoto = post.authorPhoto || post.userPhoto || (currentFriendData && currentFriendData.profilePicture) || '';
             const initial = authorName.charAt(0).toUpperCase();
-            
-            // ✅ تعريف المتغير خارج النص البرمجي HTML
+
             const hasLiked = Array.isArray(post.likes) && currentUid && post.likes.includes(currentUid);
 
             let dateStr = 'الآن';
@@ -10818,34 +10817,34 @@ window.loadFriendPosts = async function(friendId) {
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 .split('\r\n').join('<br>').split('\n').join('<br>');
 
-           const imageHTML = post.imageUrl
-    ? `<div style="margin: 12px auto; text-align: center; max-width: 540px;">
-           <img src="${post.imageUrl}" onclick="window.open('${post.imageUrl}', '_blank')"
-                style="width: 100%; max-height: 360px; object-fit: contain; background: #f8f9fa; border-radius: 10px; border: 1px solid #e4e6eb; cursor: pointer;">
-       </div>`
-    : '';
+            const imageHTML = post.imageUrl
+                ? `<div style="margin: 12px auto; text-align: center; max-width: 540px;">
+                       <img src="${post.imageUrl}" onclick="window.open('${post.imageUrl}', '_blank')"
+                            style="width: 100%; max-height: 360px; object-fit: contain; background: #f8f9fa; border-radius: 10px; border: 1px solid #e4e6eb; cursor: pointer;">
+                   </div>`
+                : '';
 
-// 2. تنسيق الفيديو (يوتيوب أو مباشر) في وسط البطاقة بحجم متناسق
-let videoHTML = '';
-const vid = post.video || post.videoData;
-if (vid && vid.type === 'youtube' && vid.id) {
-    videoHTML = `
-        <div style="max-width: 540px; margin: 12px auto;">
-            <div class="yt-box" data-id="${vid.id}" onclick="startYouTubeVideo(this)"
-                 style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; background-color: #18191a; background-image: url('https://ytimg.com{vid.id}/hqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
-                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 56px; height: 40px; background: #ff0000; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
-                    <i class="fas fa-play" style="color: white; font-size: 16px; margin-left: 3px;"></i>
-                </div>
-            </div>
-        </div>`;
-} else if (vid && vid.type === 'direct' && vid.url) {
-    videoHTML = `
-        <div style="max-width: 540px; margin: 12px auto; text-align: center;">
-            <video controls preload="metadata" style="width: 100%; max-height: 340px; border-radius: 10px; background: #000;">
-                <source src="${vid.url}" type="video/mp4">
-            </video>
-        </div>`;
-}
+            // ✅ تصحيح: img.youtube.com/vi/ و ${vid.id}
+            let videoHTML = '';
+            const vid = post.video || post.videoData;
+            if (vid && vid.type === 'youtube' && vid.id) {
+                videoHTML = `
+                    <div style="max-width: 540px; margin: 12px auto;">
+                        <div class="yt-box" data-id="${vid.id}" onclick="startYouTubeVideo(this)"
+                             style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; background-color: #18191a; background-image: url('https://img.youtube.com/vi/${vid.id}/hqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 56px; height: 40px; background: #ff0000; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
+                                <i class="fas fa-play" style="color: white; font-size: 16px; margin-left: 3px;"></i>
+                            </div>
+                        </div>
+                    </div>`;
+            } else if (vid && vid.type === 'direct' && vid.url) {
+                videoHTML = `
+                    <div style="max-width: 540px; margin: 12px auto; text-align: center;">
+                        <video controls preload="metadata" style="width: 100%; max-height: 340px; border-radius: 10px; background: #000;">
+                            <source src="${vid.url}" type="video/mp4">
+                        </video>
+                    </div>`;
+            }
 
             const avatarHTML = authorPhoto
                 ? `<img src="${authorPhoto}" style="width:44px; height:44px; border-radius:50%; object-fit:cover;">`
@@ -10855,7 +10854,6 @@ if (vid && vid.type === 'youtube' && vid.id) {
                 ? window.renderPostCommentsSection(post, post.id)
                 : '';
 
-            // ✅ وضع الأزرار والتعليقات داخل حاوية .post-card
             return `
                 <div class="post-card" style="background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); border:1px solid #e4e6eb;">
                     <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -11035,7 +11033,7 @@ function createFriendPostHTML(post) {
         if (videoObj.type === 'youtube' && videoObj.id) {
             videoHTML = `
                 <div class="yt-box" data-id="${videoObj.id}" onclick="startYouTubeVideo(this)"
-                     style="margin: 12px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; background-color: #18191a; background-image: url('https://ytimg.com{videoObj.id}/hqdefault.jpg'), url('https://ytimg.com{videoObj.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
+                     style="margin: 12px 0; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; background-color: #18191a; background-image: url('https://img.youtube.com/vi/${videoObj.id}/hqdefault.jpg'), url('https://img.youtube.com/vi/${videoObj.id}/mqdefault.jpg'); background-size: cover; background-position: center; cursor: pointer;">
                     <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 42px; background: #ff0000; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
                         <i class="fas fa-play" style="color: white; font-size: 18px; margin-left: 3px;"></i>
                     </div>
