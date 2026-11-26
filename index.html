@@ -5715,25 +5715,35 @@ iframe {
             }
         }
 
-      updateUIWithLocalData(userData) {
-            if (userData.profilePicture) {
-                this.updateProfileImages(userData.profilePicture);
-            }
-            
-            if (userData.coverPicture) {
-                document.getElementById('coverPhoto').style.backgroundImage = `url('${userData.coverPicture}')`;
-                document.getElementById('removeCoverBtn').style.display = 'block';
-            }
-            
-            const userName = userData.name || 'مستخدم';
-            document.getElementById('headerUserName').textContent = userName;
-            document.getElementById('postUserName').textContent = userName;
-            document.getElementById('mainProfileName').textContent = userName;
+    updateUIWithLocalData(userData) {
+    if (!userData) return;
 
-            
-            updateIntroSection(userData);
-            this.showMainUI();
-        }
+    if (userData.profilePicture) {
+        this.updateProfileImages(userData.profilePicture);
+    }
+
+    if (userData.coverPicture) {
+        const cover = document.getElementById('coverPhoto');
+        const removeBtn = document.getElementById('removeCoverBtn');
+        if (cover) cover.style.backgroundImage = `url('${userData.coverPicture}')`;
+        if (removeBtn) removeBtn.style.display = 'block';
+    }
+
+    const userName = userData.name || 'مستخدم';
+    const headerName = document.getElementById('headerUserName');
+    const postName   = document.getElementById('postUserName');
+    const mainName   = document.getElementById('mainProfileName');
+
+    if (headerName) headerName.textContent = userName;
+    if (postName)   postName.textContent   = userName;
+    if (mainName)   mainName.textContent   = userName;
+
+    if (typeof updateIntroSection === 'function') {
+        updateIntroSection(userData);
+    }
+
+    this.showMainUI();
+}
 
         updateProfileImages(profileUrl) {
             const images = [
