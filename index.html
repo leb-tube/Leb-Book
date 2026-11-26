@@ -8586,7 +8586,20 @@ function formatDate(date) {
             window.pageManager.editPost(postId);
         }
     };
- 
+ window.editPublicPost = window.editPost;
+/* processLinks — تحويل الروابط إلى <a> قابلة للنقر */
+window.processLinks = window.processLinks || function (text) {
+    if (!text) return '';
+    let safe = String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    safe = safe.replace(
+        /(https?:\/\/[^\s<]+)/g,
+        '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+    return safe.replace(/\n/g, '<br>');
+};
     window.saveEditedPost = function() {
         if (window.pageManager) {
             window.pageManager.saveEditedPost();
