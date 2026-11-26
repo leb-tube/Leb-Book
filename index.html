@@ -7794,145 +7794,164 @@ async deletePhoto(photoIndex, photoType = null) {
                 await window.photoManager.loadAllPhotos();
             }
         }
-async loadVideosPage() {
+ async loadVideosPage() {
+    try {
+        const container = document.getElementById('videosGrid');
+        if (!container) return;
+
+        container.innerHTML = '<p style="text-align: center; padding: 40px; color: #65676b;">جاري تحميل الفيديوهات...</p>';
+
+        let userVideos = [];
+        const currentUserId = window.authSystem?.currentUser?.uid;
+
+        if (currentUserId) {
             try {
-                const container = document.getElementById('videosGrid');
-                if (!container) return;
+                const postsSnapshot = await db.collection('posts')
+                    .where('userId', '==', currentUserId)
+                    .get();
 
-                container.innerHTML = '<p style="text-align: center; padding: 40px; color: #65676b;">جاري تحميل الفيديوهات...</p>';
-
-                let userVideos = [];
-                if (window.authSystem && window.authSystem.currentUser) {
-                    try {
-                        const postsSnapshot = await db.collection('posts')
-                            .where('userId', '==', window.authSystem.currentUser.uid)
-                            .get();
-
-                        const postsWithVideos = [];
-                        postsSnapshot.forEach(doc => {
-                            const post = doc.data();
-                            if (post.videoData) {
-                                postsWithVideos.push({
-                                    ...post.videoData,
-                                    postId: doc.id,
-                                    title: post.content ? (post.content.substring(0, 50) + (post.content.length > 50 ? '...' : '')) : 'منشور فيديو',
-                                    description: post.content || 'فيديو مرفوع',
-                                    timestamp: post.timestamp
-                                });
-                            }
+                const postsWithVideos = [];
+                postsSnapshot.forEach(doc => {
+                    const post = doc.data();
+                    if (post.videoData) {
+                        const likes = post.likes || [];
+                        postsWithVideos.push({
+                            ...post.videoData,
+                            postId: doc.id,
+                            title: post.content ? (post.content.substring(0, 50) + (post.content.length > 50 ? '...' : '')) : 'منشور فيديو',
+                            description: post.content || 'فيديو مرفوع',
+                            timestamp: post.timestamp,
+                            likesCount: likes.length,
+                            isLiked: likes.includes(currentUserId),
+                            sharesCount: post.shares || 0
                         });
-
-                        postsWithVideos.sort((a, b) => {
-                            const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
-                            const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
-                            return dateB - dateA;
-                        });
-
-                        userVideos = postsWithVideos;
-                    } catch (error) {
-                        console.error('Error loading user videos:', error);
                     }
-                }
-
-                const videosData = userVideos.length > 0 ? userVideos : [
-                    {
-                        title: 'ما للقوافي في حضرت امام علي خشعت',
-                        description: ' ',
-                        youtubeId: 'yzc3XquczwE',
-                        type: 'youtube',
-                        url: 'https://youtu.be/yzc3XquczwE'
-                    },
-                    {
-                        title: 'Le Guide Arabe-The Arab Directory نُسْخَةٌ نَادِرَةٌ لِعَامِ ١٩٦٥: كِتَابُ الدَّلِيلُ الْعَرَبِيُّ',
-                        description: '',
-                        youtubeId: 'hQ1HYs9GNdc',
-                        type: 'youtube',
-                        url: 'https://youtu.be/hQ1HYs9GNdc'
-                    }
-                ];
-
-                container.innerHTML = '';
-                videosData.forEach(video => {
-                    const videoCard = document.createElement('div');
-                    videoCard.className = 'video-card';
-
-                    let videoContent = '';
-                    if (video.type === 'youtube' || video.youtubeId) {
-                        videoContent = `
-                            <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px;">
-                                <iframe src="https://www.youtube.com/embed/${video.youtubeId || video.id}"
-                                        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                        allowfullscreen></iframe>
-                            </div>`;
-                    } else if (video.type === 'direct') {
-                        videoContent = `
-                            <div style="margin: 15px 0;">
-                                <video controls style="width: 100%; max-height: 400px; border-radius: 12px;">
-                                    <source src="${video.url}" type="video/mp4">
-                                    متصفحك لا يدعم تشغيل الفيديو.
-                                </video>
-                            </div>`;
-                    } else {
-                        videoContent = `
-                            <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background: #f0f2f5;">
-                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
-                                    <svg class="static-icon" viewBox="0 0 24 24" style="font-size: 48px; color: #65676b;">
-                                        <path fill="currentColor" d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5Z"/>
-                                    </svg>
-                                    <p style="margin-top: 10px; color: #1c1e21;">رابط فيديو</p>
-                                </div>
-                            </div>`;
-                    }
-
-                    const deleteButton = video.postId ? `
-                        <button class="delete-video-btn" onclick="deleteVideo('${video.postId}', this)">
-                            <svg class="static-icon" viewBox="0 0 24 24">
-                                <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
-                            </svg> حذف الفيديو
-                        </button>` : '';
-
-                    videoCard.innerHTML = `
-                        ${videoContent}
-                        <div style="padding: 15px; background: white; position: relative;">
-                            <h4 style="margin: 0 0 10px 0; color: #1c1e21;">${video.title}</h4>
-                            <p style="color: #65676b; font-size: 14px; margin: 0 0 15px 0;">${video.description}</p>
-                            
-                            ${deleteButton}
-                            
-             <div class="video-actions">
-    <button class="video-like-btn" onclick="${video.postId ? `toggleLike('${video.postId}', this)` : `alert('لا يمكن الإعجاب بالفيديو الافتراضي')`}">
-        <svg class="static-icon" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M23,10C23,8.89 22.1,8 21,8H14.68L15.64,3.43C15.66,3.33 15.67,3.22 15.67,3.11C15.67,2.7 15.5,2.32 15.23,2.05L14.17,1L7.59,7.58C7.22,7.95 7,8.45 7,9V19A2,2 0 0,0 9,21H18C18.83,21 19.54,20.5 19.84,19.78L22.86,12.73C22.95,12.5 23,12.26 23,12V10M1,21H5V9H1V21Z"/>
-        </svg> أعجبني
-    </button>
-    <button class="video-share-btn" onclick="shareVideoOrPost('${video.postId || ''}', '${video.url || ''}', '${video.title}')">
-        <svg class="static-icon" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M18,16.08C17.24,16.08 16.56,16.38 16.04,16.85L8.91,12.7C8.96,12.47 9,12.24 9,12C9,11.76 8.96,11.53 8.91,11.3L15.96,7.19C16.5,7.69 17.21,8 18,8A3,3 0 0,0 21,5A3,3 0 0,0 18,2A3,3 0 0,0 15,5C15,5.24 15.04,5.47 15.09,5.7L8.04,9.81C7.5,9.31 6.79,9 6,9A3,3 0 0,0 3,12A3,3 0 0,0 6,15C6.79,15 7.5,14.69 8.04,14.19L15.16,18.34C15.11,18.55 15.08,18.77 15.08,19C15.08,20.61 16.39,21.91 18,21.91C19.61,21.91 20.92,20.61 20.92,19A2.92,2.92 0 0,0 18,16.08Z"/>
-        </svg> مشاركة
-    </button>
-</div>
-
-    </div>
-                    `;
-                    container.appendChild(videoCard);
                 });
 
+                postsWithVideos.sort((a, b) => {
+                    const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+                    const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+                    return dateB - dateA;
+                });
+
+                userVideos = postsWithVideos;
             } catch (error) {
-                console.error('Error loading videos page:', error);
-                const container = document.getElementById('videosGrid');
-                if (container) {
-                    container.innerHTML = `
-                        <div style="text-align: center; padding: 50px 20px; color: #65676b;">
-                            <svg class="static-icon" viewBox="0 0 24 24" style="font-size: 60px; color: #e4e6eb; margin-bottom: 20px;">
-                                <path fill="currentColor" d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5M14,13H11V16H9V13H6V11H9V8H11V11H14V13Z"/>
-                            </svg>
-                            <p style="font-size: 18px; margin-bottom: 10px;">حدث خطأ في تحميل الفيديوهات</p>
-                            <p>${error.message || 'يرجى المحاولة مرة أخرى'}</p>
-                        </div>`;
-                }
+                console.error('Error loading user videos:', error);
             }
         }
+
+        const videosData = userVideos.length > 0 ? userVideos : [
+            {
+                title: 'ما للقوافي في حضرت امام علي خشعت',
+                description: ' ',
+                youtubeId: 'yzc3XquczwE',
+                type: 'youtube',
+                url: 'https://youtu.be'
+            },
+            {
+                title: 'Le Guide Arabe-The Arab Directory نُسْخَةٌ نَادِرَةٌ لِعَامِ ١٩٦٥: كِتَابُ الدَّلِيلُ الْعَرَبِيُّ',
+                description: '',
+                youtubeId: 'hQ1HYs9GNdc',
+                type: 'youtube',
+                url: 'https://youtu.be'
+            }
+        ];
+
+        container.innerHTML = '';
+        videosData.forEach(video => {
+            const videoCard = document.createElement('div');
+            videoCard.className = 'video-card';
+
+            let videoContent = '';
+            if (video.type === 'youtube' || video.youtubeId) {
+                videoContent = `
+                    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px;">
+                        <iframe src="https://youtube.com{video.youtubeId || video.id}"
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowfullscreen></iframe>
+                    </div>`;
+            } else if (video.type === 'direct') {
+                videoContent = `
+                    <div style="margin: 15px 0;">
+                        <video controls style="width: 100%; max-height: 400px; border-radius: 12px;">
+                            <source src="${video.url}" type="video/mp4">
+                            متصفحك لا يدعم تشغيل الفيديو.
+                        </video>
+                    </div>`;
+            } else {
+                videoContent = `
+                    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px; background: #f0f2f5;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+                            <svg class="static-icon" viewBox="0 0 24 24" style="font-size: 48px; color: #65676b;">
+                                <path fill="currentColor" d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5Z"/>
+                            </svg>
+                            <p style="margin-top: 10px; color: #1c1e21;">رابط فيديو</p>
+                        </div>
+                    </div>`;
+            }
+
+            const deleteButton = video.postId ? `
+                <button class="delete-video-btn" onclick="deleteVideo('${video.postId}', this)">
+                    <svg class="static-icon" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+                    </svg> حذف الفيديو
+                </button>` : '';
+
+            // إعداد أحداث الإعجاب والمشاركة
+            const likeOnClick = video.postId 
+                ? `window.likePost('${video.postId}')` 
+                : `alert('هذا فيديو افتراضي للعرض فقط، ارفع فيديو لتتمكن من التفاعل معه')`;
+
+            const shareOnClick = video.postId 
+                ? `window.sharePost('${video.postId}')` 
+                : `navigator.clipboard.writeText('${video.url}'); alert('تم نسخ رابط الفيديو!')`;
+
+            const likeStyle = video.isLiked ? 'color: #1877f2; font-weight: bold;' : '';
+            const likesText = video.likesCount > 0 ? `(${video.likesCount})` : '';
+            const sharesText = video.sharesCount > 0 ? `(${video.sharesCount})` : '';
+
+            videoCard.innerHTML = `
+                ${videoContent}
+                <div style="padding: 15px; background: white; position: relative;">
+                    <h4 style="margin: 0 0 10px 0; color: #1c1e21;">${video.title}</h4>
+                    <p style="color: #65676b; font-size: 14px; margin: 0 0 15px 0;">${video.description}</p>
+                    
+                    ${deleteButton}
+                    
+                    <div class="video-actions">
+                        <button class="video-like-btn ${video.isLiked ? 'liked' : ''}" style="${likeStyle}" onclick="${likeOnClick}">
+                            <svg class="static-icon" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M23,10C23,8.89 22.1,8 21,8H14.68L15.64,3.43C15.66,3.33 15.67,3.22 15.67,3.11C15.67,2.7 15.5,2.32 15.23,2.05L14.17,1L7.59,7.58C7.22,7.95 7,8.45 7,9V19A2,2 0 0,0 9,21H18C18.83,21 19.54,20.5 19.84,19.78L22.86,12.73C22.95,12.5 23,12.26 23,12V10M1,21H5V9H1V21Z"/>
+                            </svg> أعجبني ${likesText}
+                        </button>
+                        <button class="video-share-btn" onclick="${shareOnClick}">
+                            <svg class="static-icon" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M18,16.08C17.24,16.08 16.56,16.38 16.04,16.85L8.91,12.7C8.96,12.47 9,12.24 9,12C9,11.76 8.96,11.53 8.91,11.3L15.96,7.19C16.5,7.69 17.21,8 18,8A3,3 0 0,0 21,5A3,3 0 0,0 18,2A3,3 0 0,0 15,5C15,5.24 15.04,5.47 15.09,5.7L8.04,9.81C7.5,9.31 6.79,9 6,9A3,3 0 0,0 3,12A3,3 0 0,0 6,15C6.79,15 7.5,14.69 8.04,14.19L15.16,18.34C15.11,18.55 15.08,18.77 15.08,19C15.08,20.61 16.39,21.91 18,21.91C19.61,21.91 20.92,20.61 20.92,19A2.92,2.92 0 0,0 18,16.08Z"/>
+                            </svg> مشاركة ${sharesText}
+                        </button>
+                    </div>
+                </div>
+            `;
+            container.appendChild(videoCard);
+        });
+
+    } catch (error) {
+        console.error('Error loading videos page:', error);
+        const container = document.getElementById('videosGrid');
+        if (container) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 50px 20px; color: #65676b;">
+                    <svg class="static-icon" viewBox="0 0 24 24" style="font-size: 60px; color: #e4e6eb; margin-bottom: 20px;">
+                        <path fill="currentColor" d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5M14,13H11V16H9V13H6V11H9V8H11V11H14V13Z"/>
+                    </svg>
+                    <p style="font-size: 18px; margin-bottom: 10px;">حدث خطأ في تحميل الفيديوهات</p>
+                    <p>${error.message || 'يرجى المحاولة مرة أخرى'}</p>
+                </div>`;
+        }
+    }
+}
+
       
 
         async editPost(postId) {
@@ -8123,37 +8142,64 @@ window.togglePostMenu = function(postId, event) {
             window.postManager.removeVideoLink();
         }
     };
-
-    window.likePost = async function(postId) {
-        if (!window.authSystem?.currentUser) {
-            alert('يجب تسجيل الدخول أولاً');
-            return;
+window.likePost = async function(postId) {
+    if (!window.authSystem?.currentUser) {
+        alert('يجب تسجيل الدخول أولاً');
+        return;
+    }
+    
+    try {
+        const postRef = db.collection('posts').doc(postId);
+        const postDoc = await postRef.get();
+        const post = postDoc.data();
+        
+        const likes = post.likes || [];
+        const userId = window.authSystem.currentUser.uid;
+        
+        if (likes.includes(userId)) {
+            await postRef.update({
+                likes: firebase.firestore.FieldValue.arrayRemove(userId)
+            });
+        } else {
+            await postRef.update({
+                likes: firebase.firestore.FieldValue.arrayUnion(userId)
+            });
         }
         
-        try {
-            const postRef = db.collection('posts').doc(postId);
-            const postDoc = await postRef.get();
-            const post = postDoc.data();
-            
-            const likes = post.likes || [];
-            const userId = window.authSystem.currentUser.uid;
-            
-            if (likes.includes(userId)) {
-                await postRef.update({
-                    likes: firebase.firestore.FieldValue.arrayRemove(userId)
-                });
-            } else {
-                await postRef.update({
-                    likes: firebase.firestore.FieldValue.arrayUnion(userId)
-                });
-            }
-            
-            if (window.postManager) window.postManager.loadPosts();
-        } catch (error) {
-            console.error('Error liking post:', error);
+        if (window.postManager) window.postManager.loadPosts();
+        // تحديث صفحة الفيديوهات إذا كانت مفتوحة حالياً (استبدل الكائن باسمه في مشروعك)
+        if (document.getElementById('videosGrid') && window.videoManager) {
+            window.videoManager.loadVideosPage();
         }
-    };
+    } catch (error) {
+        console.error('Error liking post:', error);
+    }
+};
 
+window.sharePost = async function(postId) {
+    if (!window.authSystem?.currentUser) {
+        alert('يجب تسجيل الدخول أولاً');
+        return;
+    }
+    
+    try {
+        await db.collection('posts').doc(postId).update({
+            shares: firebase.firestore.FieldValue.increment(1)
+        });
+        
+        if (window.postManager) window.postManager.showMessage('تمت المشاركة بنجاح!', 'success');
+        if (window.postManager) window.postManager.loadPosts();
+        // تحديث صفحة الفيديوهات إذا كانت مفتوحة حالياً (استبدل الكائن باسمه في مشروعك)
+        if (document.getElementById('videosGrid') && window.videoManager) {
+            window.videoManager.loadVideosPage();
+        }
+    } catch (error) {
+        console.error('Error sharing post:', error);
+        if (window.postManager) window.postManager.showMessage('حدث خطأ أثناء المشاركة', 'error');
+    }
+};
+
+    
     window.commentOnPost = async function(postId) {
         if (!window.authSystem?.currentUser) {
             alert('يجب تسجيل الدخول أولاً');
@@ -8184,28 +8230,6 @@ window.togglePostMenu = function(postId, event) {
             if (window.postManager) window.postManager.showMessage('حدث خطأ أثناء إضافة التعليق', 'error');
         }
     };
-
-    window.sharePost = async function(postId) {
-        if (!window.authSystem?.currentUser) {
-            alert('يجب تسجيل الدخول أولاً');
-            return;
-        }
-        
-        try {
-            await db.collection('posts').doc(postId).update({
-                shares: firebase.firestore.FieldValue.increment(1)
-            });
-            
-            if (window.postManager) window.postManager.showMessage('تمت المشاركة بنجاح!', 'success');
-            if (window.postManager) window.postManager.loadPosts();
-        } catch (error) {
-            console.error('Error sharing post:', error);
-            if (window.postManager) window.postManager.showMessage('حدث خطأ أثناء المشاركة', 'error');
-        }
-    };
-
-
-
 // إغلاق القوائم عند النقر في أي مكان
 document.addEventListener('click', function(e) {
     if (!e.target.closest('.post-menu') && !e.target.closest('.post-menu-btn')) {
