@@ -11647,7 +11647,7 @@ function syncComposerOg(textareaId, containerId) {
     const currentText = (textarea.value || '').trim();
     const url = extractFirstUrl(currentText);
 
-    if (!url || isYouTube(url) || isInternalUrl(url) || isTemplateUrl(url)) {
+    if (!url || isYouTube(url) || isTemplateUrl(url)) {
         container.style.display = 'none';
         container.innerHTML = '';
         delete container.dataset.ogUrl;
@@ -11675,18 +11675,18 @@ function processPostCard(card) {
     const scope = contentEl || card;
 
     let foundUrl = '';
-    const anchors = scope.querySelectorAll('a[href^="http"]');
-    for (const a of anchors) {
-        if (a.closest('.post-menu, .public-post-options-menu, .post-actions, .public-post-actions')) continue;
-        if (a.closest('.post-og-container')) continue;
-        const href = a.getAttribute('href') || '';
-        if (!href) continue;
-        if (isYouTube(href)) continue;
-        if (isInternalUrl(href)) continue;
-        if (isTemplateUrl(href)) continue;
-        foundUrl = href;
-        break;
-    }
+  const anchors = scope.querySelectorAll('a[href^="http"]');
+for (const a of anchors) {
+    if (a.closest('.post-menu, .public-post-options-menu, .post-actions, .public-post-actions')) continue;
+    if (a.closest('.post-og-container')) continue;
+    const href = a.getAttribute('href') || '';
+    if (!href) continue;
+    if (isYouTube(href)) continue;
+    // if (isInternalUrl(href)) continue;  // ← احذف هذا السطر
+    if (isTemplateUrl(href)) continue;
+    foundUrl = href;
+    break;
+}
 
     if (!foundUrl) {
         const txt = scope.innerText || scope.textContent || '';
