@@ -7953,21 +7953,27 @@ async loadVideosPage() {
             });
 
             shareBtn.addEventListener('click', async () => {
-                if (!video.postId) {
-                    if (video.url) {
-                        navigator.clipboard.writeText(video.url);
-                        alert('تم نسخ رابط الفيديو!');
-                    }
-                    return;
-                }
-                await window.sharePost(video.postId);
-                const countSpan = shareBtn.querySelector('.v-share-count');
-                let currentCount = (parseInt(countSpan.textContent.replace(/\D/g, '')) || 0) + 1;
-                countSpan.textContent = `(${currentCount})`;
-            });
+    if (!video.postId) {
+        if (video.url) {
+            navigator.clipboard.writeText(video.url);
+            alert('تم نسخ رابط الفيديو!');
+        }
+        return;
+    }
 
-            container.appendChild(videoCard);
-        });
+    // استدعاء الدالة الموحدة مع التحقق من وجودها
+    if (typeof window.shareUnifiedPost === 'function') {
+        await window.shareUnifiedPost(video.postId);
+    } else if (typeof window.sharePost === 'function') {
+        await window.sharePost(video.postId);
+    }
+
+    // تحديث العداد في واجهة بطاقة الفيديو
+    const countSpan = shareBtn.querySelector('.v-share-count');
+    let currentCount = (parseInt(countSpan.textContent.replace(/\D/g, '')) || 0) + 1;
+    countSpan.textContent = `(${currentCount})`;
+});
+
 
     } catch (error) {
         console.error('Error loading videos page:', error);
