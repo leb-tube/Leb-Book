@@ -8110,7 +8110,10 @@ async saveEditedPost() {
         
         const postContentElement = document.getElementById(`postContent-${this.editingPostId}`);
         if (postContentElement) {
-            postContentElement.innerHTML = processLinks(newContent);
+          const postContentElement = document.getElementById(`postContent-${this.editingPostId}`);
+if (postContentElement) {
+    renderPostContent(postContentElement, newContent);
+}
         }
         
         this.closeEditModal();
@@ -8587,7 +8590,37 @@ function formatDate(date) {
         }
     };
  window.editPublicPost = window.editPost;
+window.renderPostContent = function (element, text) {
+    if (!element) return;
+    element.textContent = '';                       // تفريغ فوري
+    if (text === null || text === undefined || text === '') return;
 
+    const str = String(text);
+    element.style.whiteSpace = 'pre-wrap';          // يحافظ على الأسطر
+    element.style.wordBreak = 'break-word';
+
+    // تقسيم النص إلى: نص عادي + روابط
+    const parts = str.split(/(https?:\/\/[^\s]+)/g);
+    const frag = document.createDocumentFragment();
+
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (!part) continue;
+
+        if (/^https?:\/\//.test(part)) {
+            const a = document.createElement('a');
+            a.href = part;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = part;                   // لا innerHTML
+            frag.appendChild(a);
+        } else {
+            frag.appendChild(document.createTextNode(part));
+        }
+    }
+
+    element.appendChild(frag);
+};
     window.saveEditedPost = function() {
         if (window.pageManager) {
             window.pageManager.saveEditedPost();
