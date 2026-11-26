@@ -5703,16 +5703,44 @@ iframe {
                     .get();
                     
                 const batch = db.batch();
-                postsSnapshot.forEach(doc => {
-                    batch.update(doc.ref, { userPhoto: newProfileUrl });
-                });
-                
-                await batch.commit();
-                console.log('تم تحديث جميع المنشورات بالصورة الشخصية الجديدة');
-            } catch (error) {
-                console.error('Error updating posts profile:', error);
-            }
+              postsSnapshot.forEach(doc => {
+    const post = doc.data();
+    if (post.videoData) {
+        const likes = Array.isArray(post.likes) ? post.likes : [];
+        
+        // 1. محاولة استخراج اسم الملف من الرابط إذا كان مرفوعاً مباشرة
+        let fileNameFromUrl = '';
+        if (post.videoData.url && post.videoData.type === 'direct') {
+            try {
+                const rawName = decodeURIComponent(post.videoData.url.split('/').pop().split('?')[0]);
+                fileNameFromUrl = rawName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " "); // إزالة الامتداد والشرطات
+            } catch (e) {}
         }
+
+        // 2. تحديد أفضل عنوان متوفر بالترتيب
+        const resolvedTitle = 
+            post.videoData.title || 
+            post.videoData.name || 
+            (post.content ? (post.content.substring(0, 60) + (post.content.length > 60 ? '...' : '')) : '') || 
+            fileNameFromUrl || 
+            'جاري جلب العنوان...'; // سيتم تحديثه تلقائياً إذا كان يوتيوب
+
+        // 3. تحديد الوصف (إخفاء "فيديو مرفوع" إذا لم يوجد وصف حقيقي)
+        const resolvedDescription = post.content || post.videoData.description || '';
+
+        postsWithVideos.push({
+            ...post.videoData,
+            postId: doc.id,
+            title: resolvedTitle,
+            description: resolvedDescription,
+            hasCustomTitle: Boolean(post.videoData.title || post.videoData.name || post.content || fileNameFromUrl),
+            timestamp: post.timestamp,
+            likesCount: likes.length,
+            isLiked: likes.includes(currentUserId),
+            sharesCount: post.shares || 0
+        });
+    }
+});
 
       updateUIWithLocalData(userData) {
             if (userData.profilePicture) {
@@ -7969,6 +7997,24 @@ async loadVideosPage() {
             });
 
             container.appendChild(videoCard);
+            // إذا كان الفيديو يوتيوب ولا يملك عنواناً مخصصاً، نجلبه تلقائياً من يوتيوب
+if (!video.hasCustomTitle && (video.type === 'youtube' || video.youtubeId)) {
+    const ytId = video.youtubeId || video.id;
+    const titleEl = videoCard.querySelector('h4');
+    fetch(`https://noembed.com{ytId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.title && titleEl) {
+                titleEl.textContent = data.title;
+            } else if (titleEl) {
+                titleEl.textContent = 'فيديو يوتيوب';
+            }
+        })
+        .catch(() => {
+            if (titleEl) titleEl.textContent = 'فيديو يوتيوب';
+        });
+}
+
         });
 
     } catch (error) {
