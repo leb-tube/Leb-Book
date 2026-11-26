@@ -11689,7 +11689,7 @@ function processPostCard(card) {
         const matches = txt.match(/https?:\/\/[^\s"'<>]+/g) || [];
         for (const m of matches) {
             if (isYouTube(m)) continue;
-            if (isInternalUrl(m)) continue;
+           
             if (isTemplateUrl(m)) continue;
             foundUrl = m;
             break;
