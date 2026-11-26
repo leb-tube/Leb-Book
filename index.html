@@ -7815,13 +7815,6 @@ async deletePhoto(photoIndex, photoType = null) {
                 console.error('Error loading about info:', error);
             }
         }
-
-
-        async loadPhotosPage() {
-            if (window.photoManager) {
-                await window.photoManager.loadAllPhotos();
-            }
-        }
 async loadVideosPage() {
     try {
         const container = document.getElementById('videosGrid');
@@ -7843,11 +7836,30 @@ async loadVideosPage() {
                     const post = doc.data();
                     if (post.videoData) {
                         const likes = Array.isArray(post.likes) ? post.likes : [];
+
+                        let fileNameFromUrl = '';
+                        if (post.videoData.url && post.videoData.type === 'direct') {
+                            try {
+                                const rawName = decodeURIComponent(post.videoData.url.split('/').pop().split('?')[0]);
+                                fileNameFromUrl = rawName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+                            } catch (e) {}
+                        }
+
+                        const resolvedTitle =
+                            post.videoData.title ||
+                            post.videoData.name ||
+                            (post.content ? (post.content.substring(0, 60) + (post.content.length > 60 ? '...' : '')) : '') ||
+                            fileNameFromUrl ||
+                            'جاري جلب العنوان...';
+
+                        const resolvedDescription = post.content || post.videoData.description || '';
+
                         postsWithVideos.push({
                             ...post.videoData,
                             postId: doc.id,
-                            title: post.content ? (post.content.substring(0, 50) + (post.content.length > 50 ? '...' : '')) : 'منشور فيديو',
-                            description: post.content || 'فيديو مرفوع',
+                            title: resolvedTitle,
+                            description: resolvedDescription,
+                            hasCustomTitle: Boolean(post.videoData.title || post.videoData.name || post.content || fileNameFromUrl),
                             timestamp: post.timestamp,
                             likesCount: likes.length,
                             isLiked: likes.includes(currentUserId),
@@ -7874,14 +7886,16 @@ async loadVideosPage() {
                 description: ' ',
                 youtubeId: 'yzc3XquczwE',
                 type: 'youtube',
-                url: 'https://youtu.be'
+                url: 'https://youtu.be',
+                hasCustomTitle: true
             },
             {
                 title: 'Le Guide Arabe-The Arab Directory نُسْخَةٌ نَادِرَةٌ لِعَامِ ١٩٦٥: كِتَابُ الدَّلِيلُ الْعَرَبِيُّ',
                 description: '',
                 youtubeId: 'hQ1HYs9GNdc',
                 type: 'youtube',
-                url: 'https://youtu.be'
+                url: 'https://youtu.be',
+                hasCustomTitle: true
             }
         ];
 
@@ -7894,7 +7908,7 @@ async loadVideosPage() {
             if (video.type === 'youtube' || video.youtubeId) {
                 videoContent = `
                     <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px;">
-                        <iframe src="https://www.youtube.com/embed/${video.youtubeId || video.id}"
+                        <iframe src="https://youtube.com{video.youtubeId || video.id}"
                                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowfullscreen></iframe>
@@ -7986,51 +8000,12 @@ async loadVideosPage() {
                     }
                     return;
                 }
-                if (typeof window.shareUnifiedPost === 'function') {
-                    await window.shareUnifiedPost(video.postId);
-                } else if (typeof window.sharePost === 'function') {
-                    await window.sharePost(video.postId);
-                }
-                const countSpan = shareBtn.querySelector('.v-share-count');
-                let currentCount = (parseInt(countSpan.textContent.replace(/\D/g, '')) || 0) + 1;
-                countSpan.textContent = `(${currentCount})`;
-            });
 
-            container.appendChild(videoCard);
-            // إذا كان الفيديو يوتيوب ولا يملك عنواناً مخصصاً، نجلبه تلقائياً من يوتيوب
-if (!video.hasCustomTitle && (video.type === 'youtube' || video.youtubeId)) {
-    const ytId = video.youtubeId || video.id;
-    const titleEl = videoCard.querySelector('h4');
-    fetch(`https://noembed.com{ytId}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data && data.title && titleEl) {
-                titleEl.textContent = data.title;
-            } else if (titleEl) {
-                titleEl.textContent = 'فيديو يوتيوب';
+        async loadPhotosPage() {
+            if (window.photoManager) {
+                await window.photoManager.loadAllPhotos();
             }
-        })
-        .catch(() => {
-            if (titleEl) titleEl.textContent = 'فيديو يوتيوب';
-        });
-}
-
-        });
-
-    } catch (error) {
-        console.error('Error loading videos page:', error);
-        const container = document.getElementById('videosGrid');
-        if (container) {
-            container.innerHTML = `
-                <div style="text-align: center; padding: 50px 20px; color: #65676b;">
-                    <p style="font-size: 18px; margin-bottom: 10px;">حدث خطأ في تحميل الفيديوهات</p>
-                    <p>${error.message || 'يرجى المحاولة مرة أخرى'}</p>
-                </div>`;
         }
-    }
-}
-
-
 
         async editPost(postId) {
             try {
