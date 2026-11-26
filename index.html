@@ -8108,7 +8108,6 @@ async saveEditedPost() {
             hasLinks: /https?:\/\//i.test(newContent) // إضافة حقل للإشارة لوجود روابط
         });
         
-        const postContentElement = document.getElementById(`publicPostContent-${this.editingPostId}`);
         const postContentElement =
     document.getElementById(`publicPostContent-${this.editingPostId}`) ||
     document.getElementById(`postContent-${this.editingPostId}`);   // fallback للصفحة الشخصية
