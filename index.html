@@ -8,9 +8,6 @@
 <meta property="og:image" content=""https://leb-tube.github.io/Leb-Book/leb-book.png" />
 <meta property="og:url" content="https://leb-tube.github.io/Leb-Book/" />
 <meta property="og:type" content="website" />
-
-
- 
  <style>
  * {
     margin: 0;
@@ -11420,20 +11417,25 @@ window.confirmDeletePublicPost = window.executeInstantDelete;
 window.deletePost = window.executeInstantDelete;
 window.deletePublicPost = window.executeInstantDelete;
 // ============================================================
-// نظام جلب معاينة المواقع (OG Fetch) — v5 مع Microlink Proxy
+// نظام جلب معاينة المواقع (OG Fetch) — v6 (إصلاحات)
 // ============================================================
 
-// 🔴 ضع رابط الـ Worker الخاص بك هنا
 const OG_PROXY_URL = 'https://fragrant-limit-666c.lifenasser85.workers.dev';
 
+// 🔴 تهيئة آمنة (كانت مفقودة!)
+window.ogCache = window.ogCache || {};
 window.__ogFailedUrls = window.__ogFailedUrls || new Map();
-const OG_FAIL_TTL = 5 * 60 * 1000; // 5 دقائق
 
+const OG_FAIL_TTL  = 5  * 60 * 1000;   // 5 دقائق
+const OG_CACHE_TTL = 60 * 60 * 1000;   // ساعة (كانت غير معرّفة)
+
+// ------------------------------------------------------------
+// 1) جلب بيانات OG
+// ------------------------------------------------------------
 window.fetchOgFromUrl = async function (rawUrl) {
     const url = String(rawUrl || '').trim();
     if (!url || !/^https?:\/\//i.test(url)) return null;
 
-    // تحقق من الفشل المؤقت
     const failedAt = window.__ogFailedUrls.get(url);
     if (failedAt && Date.now() - failedAt < OG_FAIL_TTL) return null;
 
@@ -11466,8 +11468,7 @@ window.fetchOgFromUrl = async function (rawUrl) {
             const img = json.data.image;
             resultData.image =
                 (img && (img.url || (typeof img === 'string' ? img : ''))) ||
-                (json.data.logo && json.data.logo.url) ||
-                '';
+                (json.data.logo && json.data.logo.url) || '';
         } else {
             window.__ogFailedUrls.set(url, Date.now());
             return null;
@@ -11481,16 +11482,34 @@ window.fetchOgFromUrl = async function (rawUrl) {
     window.ogCache[url] = resultData;
     try {
         localStorage.setItem('og_cache_' + url, JSON.stringify({
-            ts: Date.now(),
-            data: resultData
+            ts: Date.now(), data: resultData
         }));
     } catch (e) {}
 
-    console.log('OG result for', url, resultData);
     return resultData;
 };
 
-// ---------- 2) بناء HTML البطاقة ----------
+// ------------------------------------------------------------
+// 2) بناء رابط صورة آمن (weserv أولاً)
+// ------------------------------------------------------------
+function buildOgImageSrc(imgUrl) {
+    const s = String(imgUrl || '').trim();
+    if (!s) return { primary: '', fallback: '' };
+    if (/^data:/i.test(s)) return { primary: s, fallback: '' };
+    if (/images\.weserv\.nl/i.test(s)) return { primary: s, fallback: '' };
+
+    const stripped = s.replace(/^https?:\/\//i, '').replace(/^\/\//, '');
+    if (!stripped) return { primary: s, fallback: '' };
+
+    return {
+        primary:  'https://images.weserv.nl/?url=' + encodeURIComponent(stripped),
+        fallback: s
+    };
+}
+
+// ------------------------------------------------------------
+// 3) بناء HTML البطاقة
+// ------------------------------------------------------------
 window.buildOgContainerHTML = function (data) {
     if (!data) return '';
     const esc = (s) => String(s || '')
@@ -11500,15 +11519,15 @@ window.buildOgContainerHTML = function (data) {
 
     let imageBlock = '';
     if (data.image) {
-        const proxied = 'https://images.weserv.nl/?url=' +
-            encodeURIComponent(String(data.image).replace(/^https?:\/\//, ''));
+        const srcs = buildOgImageSrc(data.image);
         imageBlock = `
             <div class="og-img-holder" style="width:100%;height:210px;overflow:hidden;
                 background:linear-gradient(135deg,#f0f2f5,#e4e6eb);
                 display:flex;align-items:center;justify-content:center;position:relative;">
-                <img class="og-thumb" src="${esc(data.image)}" alt=""
+                <img class="og-thumb" src="${esc(srcs.primary)}" alt=""
+                     data-original="${esc(srcs.fallback)}"
                      referrerpolicy="no-referrer" loading="lazy"
-                     data-proxy="${esc(proxied)}"
+                     onerror="window.__ogImgFail && window.__ogImgFail(this)"
                      style="max-width:100%;max-height:100%;width:auto;height:auto;
                             object-fit:contain;display:block;margin:0 auto;">
             </div>`;
@@ -11559,14 +11578,23 @@ window.buildOgContainerHTML = function (data) {
         </a>`;
 };
 
-// ---------- 3) معالجة فشل الصور ----------
-window.__ogImgFail = function (imgEl, proxiedUrl) {
-    imgEl.onerror = null;
-    if (!imgEl.dataset.triedProxy && proxiedUrl) {
-        imgEl.dataset.triedProxy = '1';
-        imgEl.src = proxiedUrl;
+// ------------------------------------------------------------
+// 4) معالجة فشل الصور (weserv → original → placeholder)
+// ------------------------------------------------------------
+window.__ogImgFail = function (imgEl) {
+    if (!imgEl || imgEl.dataset.ogFail === 'done') return;
+    const original = imgEl.dataset.original || '';
+
+    if (original && !imgEl.dataset.triedOriginal) {
+        imgEl.dataset.triedOriginal = '1';
+        imgEl.onerror = null;
+        imgEl.src = original;
+        imgEl.onerror = () => window.__ogImgFail(imgEl);
         return;
     }
+
+    imgEl.dataset.ogFail = 'done';
+    imgEl.onerror = null;
     const holder = imgEl.parentElement;
     if (holder) {
         holder.innerHTML =
@@ -11580,55 +11608,84 @@ window.bindOgImageErrors = function (root) {
     (root || document).querySelectorAll('img.og-thumb:not([data-bound])').forEach(img => {
         img.dataset.bound = '1';
         if (img.complete && img.naturalWidth === 0) {
-            window.__ogImgFail(img, img.dataset.proxy || '');
+            window.__ogImgFail(img);
             return;
         }
-        img.addEventListener('error', function () {
-            window.__ogImgFail(this, this.dataset.proxy || '');
-        });
+        img.addEventListener('error', function () { window.__ogImgFail(this); });
     });
 };
 
-// ---------- 4) أدوات مساعدة ----------
+// ------------------------------------------------------------
+// 5) أدوات مساعدة
+// ------------------------------------------------------------
 function extractFirstUrl(text) {
     const m = String(text || '').match(/https?:\/\/[^\s"'<>]+/);
     return (m && m[0]) ? m[0] : '';
 }
 function isYouTube(u) { return /youtube\.com|youtu\.be/i.test(u); }
-function isInternalUrl(u) {
-    try { return new URL(u).hostname === location.hostname; }
-    catch (_) { return false; }
-}
 function isTemplateUrl(u) { return /\{[^}]+\}/.test(u); }
 
-// ---------- 5) رسم البطاقة ----------
+// ------------------------------------------------------------
+// 6) رسم البطاقة (مع إرجاع نجاح/فشل)
+// ------------------------------------------------------------
 async function renderOgInto(container, url, guardFn) {
-    if (!container || !url) return;
-    if (container.dataset.ogUrl === url) return;
+    if (!container || !url) return false;
+
+    if (container.dataset.ogUrl === url && container.dataset.ogState === 'success') return true;
+    if (container.dataset.ogUrl === url && container.dataset.ogState === 'loading') return false;
+
+    // فشل معروف مؤخراً → لا سبينر ولا طلب
+    const failedAt = window.__ogFailedUrls.get(url);
+    if (failedAt && Date.now() - failedAt < OG_FAIL_TTL) {
+        container.dataset.ogUrl = url;
+        container.dataset.ogState = 'failed';
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return false;
+    }
+
     container.dataset.ogUrl = url;
+    container.dataset.ogState = 'loading';
     container.style.display = 'block';
     container.innerHTML =
-        '<div style="padding:10px;text-align:center;color:#1877f2;font-size:13px;background:#f0f2f5;border-radius:10px;">' +
+        '<div style="padding:10px;text-align:center;color:#1877f2;font-size:13px;' +
+        'background:#f0f2f5;border-radius:10px;">' +
         '<i class="fas fa-spinner fa-spin"></i> جاري جلب معاينة الرابط...</div>';
 
     try {
         const data = await window.fetchOgFromUrl(url);
-        if (guardFn && !guardFn()) return;
-        if (container.dataset.ogUrl !== url) return;
+
+        // تغيّر الرابط أثناء الجلب → تجاهل
+        if (container.dataset.ogUrl !== url) return false;
+        if (guardFn && !guardFn()) {
+            container.dataset.ogState = 'failed';
+            return false;
+        }
+
         if (data && (data.image || data.title)) {
             container.innerHTML = window.buildOgContainerHTML(data);
+            container.dataset.ogState = 'success';
             window.bindOgImageErrors(container);
-        } else {
-            container.innerHTML = '';
-            container.style.display = 'none';
+            return true;
         }
-    } catch (e) {
+
         container.innerHTML = '';
         container.style.display = 'none';
+        container.dataset.ogState = 'failed';
+        return false;
+    } catch (e) {
+        if (container.dataset.ogUrl === url) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+            container.dataset.ogState = 'failed';
+        }
+        return false;
     }
 }
 
-// ---------- 6) صندوق الكتابة ----------
+// ------------------------------------------------------------
+// 7) صندوق الكتابة (مع input listener + debounce)
+// ------------------------------------------------------------
 function syncComposerOg(textareaId, containerId) {
     const textarea = document.getElementById(textareaId);
     if (!textarea) return;
@@ -11648,22 +11705,32 @@ function syncComposerOg(textareaId, containerId) {
         container.style.display = 'none';
         container.innerHTML = '';
         delete container.dataset.ogUrl;
+        delete container.dataset.ogState;
         return;
     }
 
     renderOgInto(container, url, () => (textarea.value || '').includes(url));
 }
 
-// ---------- 7) معالجة بطاقة منشور ----------
-function processPostCard(card) {
-    if (!card || card.dataset.ogDone === 'true') return;
-    if (card.dataset.ogProcessing === 'true') return;
+function ensureComposerListeners() {
+    [['postContent', 'mainOgPreviewContainer'],
+     ['publicPostContent', 'publicOgPreviewContainer']].forEach(([taId, cId]) => {
+        const ta = document.getElementById(taId);
+        if (!ta || ta.dataset.ogListener) return;
+        ta.dataset.ogListener = '1';
+        const debounced = () => {
+            clearTimeout(ta._ogTimer);
+            ta._ogTimer = setTimeout(() => syncComposerOg(taId, cId), 450);
+        };
+        ta.addEventListener('input', debounced);
+        ta.addEventListener('paste', () => setTimeout(debounced, 100));
+    });
+}
 
-    if (card.querySelector(':scope > .post-og-container')) {
-        card.dataset.ogDone = 'true';
-        return;
-    }
-
+// ------------------------------------------------------------
+// 8) معالجة بطاقة منشور
+// ------------------------------------------------------------
+function findPostUrl(card) {
     const contentEl = card.querySelector(
         '.posts, .public, .post-content, .public-post-content, ' +
         '.post-text, .post-body, .post-caption, .post-description, ' +
@@ -11671,31 +11738,35 @@ function processPostCard(card) {
     );
     const scope = contentEl || card;
 
-    let foundUrl = '';
     const anchors = scope.querySelectorAll('a[href^="http"]');
     for (const a of anchors) {
         if (a.closest('.post-menu, .public-post-options-menu, .post-actions, .public-post-actions')) continue;
         if (a.closest('.post-og-container')) continue;
         const href = a.getAttribute('href') || '';
-        if (!href) continue;
-        if (isYouTube(href)) continue;
-        if (isTemplateUrl(href)) continue;
-        foundUrl = href;
-        break;
+        if (!href || isYouTube(href) || isTemplateUrl(href)) continue;
+        return href;
     }
 
-    if (!foundUrl) {
-        const txt = scope.innerText || scope.textContent || '';
-        const matches = txt.match(/https?:\/\/[^\s"'<>]+/g) || [];
-        for (const m of matches) {
-            if (isYouTube(m)) continue;
-           
-            if (isTemplateUrl(m)) continue;
-            foundUrl = m;
-            break;
-        }
+    const txt = scope.innerText || scope.textContent || '';
+    const matches = txt.match(/https?:\/\/[^\s"'<>]+/g) || [];
+    for (const m of matches) {
+        if (isYouTube(m) || isTemplateUrl(m)) continue;
+        return m;
+    }
+    return '';
+}
+
+function processPostCard(card) {
+    if (!card || card.dataset.ogDone === 'true') return;
+    if (card.dataset.ogProcessing === 'true') return;
+
+    let ogWrapper = card.querySelector(':scope > .post-og-container');
+    if (ogWrapper && ogWrapper.dataset.ogState === 'success') {
+        card.dataset.ogDone = 'true';
+        return;
     }
 
+    const foundUrl = findPostUrl(card);
     if (!foundUrl) {
         card.dataset.ogDone = 'true';
         return;
@@ -11703,29 +11774,37 @@ function processPostCard(card) {
 
     card.dataset.ogProcessing = 'true';
 
-    const ogWrapper = document.createElement('div');
-    ogWrapper.className = 'post-og-container';
-    ogWrapper.style.margin = '10px 0';
+    if (!ogWrapper) {
+        ogWrapper = document.createElement('div');
+        ogWrapper.className = 'post-og-container';
+        ogWrapper.style.margin = '10px 0';
+        const actionsBar = card.querySelector('.post-actions, .public-post-actions');
+        if (actionsBar) actionsBar.insertAdjacentElement('beforebegin', ogWrapper);
+        else card.appendChild(ogWrapper);
+    }
 
-    const actionsBar = card.querySelector('.post-actions, .public-post-actions');
-    if (actionsBar) actionsBar.insertAdjacentElement('beforebegin', ogWrapper);
-    else card.appendChild(ogWrapper);
-
-    renderOgInto(ogWrapper, foundUrl, () => card.isConnected && !card.dataset.ogRemoved)
-        .finally(() => {
+    renderOgInto(ogWrapper, foundUrl, () => card.isConnected)
+        .then(ok => {
             card.dataset.ogProcessing = 'false';
-            card.dataset.ogDone = 'true';
-        });
+            // ✅ لا نضع ogDone عند الفشل — ليتمكن الـ interval من إعادة المحاولة
+            if (ok) card.dataset.ogDone = 'true';
+        })
+        .catch(() => { card.dataset.ogProcessing = 'false'; });
 }
 
-// ---------- 8) محددات البطاقات ----------
-const POST_SEL = '.post-card, .public-post-card, .post, .feed-post, .post-item, .public-post-item';
+// ------------------------------------------------------------
+// 9) محددات البطاقات (تأكد من مطابقتها لموقعك!)
+// ------------------------------------------------------------
+const POST_SEL = '.post-card, .public-post-card, .post, .feed-post, ' +
+                 '.post-item, .public-post-item, .public-post, .post-container';
 
 function scanAllPosts(root) {
     (root || document).querySelectorAll(POST_SEL).forEach(processPostCard);
 }
 
-// ---------- 9) MutationObserver ----------
+// ------------------------------------------------------------
+// 10) MutationObserver
+// ------------------------------------------------------------
 const ogObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
         for (const node of m.addedNodes) {
@@ -11735,9 +11814,17 @@ const ogObserver = new MutationObserver((mutations) => {
         }
     }
 });
-ogObserver.observe(document.body, { childList: true, subtree: true });
+if (document.body) {
+    ogObserver.observe(document.body, { childList: true, subtree: true });
+} else {
+    document.addEventListener('DOMContentLoaded', () => {
+        ogObserver.observe(document.body, { childList: true, subtree: true });
+    });
+}
 
-// ---------- 10) إعادة تعيين عند تبديل الصفحات ----------
+// ------------------------------------------------------------
+// 11) إعادة تعيين عند تبديل الصفحات
+// ------------------------------------------------------------
 document.querySelectorAll('[data-page]').forEach(nav => {
     nav.addEventListener('click', () => {
         document.querySelectorAll('.post-og-container').forEach(el => el.remove());
@@ -11749,8 +11836,11 @@ document.querySelectorAll('[data-page]').forEach(nav => {
     });
 });
 
-// ---------- 11) شبكة أمان دورية ----------
+// ------------------------------------------------------------
+// 12) شبكة أمان دورية
+// ------------------------------------------------------------
 setInterval(() => {
+    try { ensureComposerListeners(); } catch (e) {}
     try { syncComposerOg('postContent', 'mainOgPreviewContainer'); } catch (e) {}
     try { syncComposerOg('publicPostContent', 'publicOgPreviewContainer'); } catch (e) {}
     try { scanAllPosts(document); } catch (e) {}
