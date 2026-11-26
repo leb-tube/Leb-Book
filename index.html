@@ -8108,13 +8108,30 @@ async saveEditedPost() {
             hasLinks: /https?:\/\//i.test(newContent) // إضافة حقل للإشارة لوجود روابط
         });
         
-        const postContentElement = document.getElementById(`postContent-${this.editingPostId}`);
-        if (postContentElement) {
-          const postContentElement = document.getElementById(`postContent-${this.editingPostId}`);
+        const postContentElement = document.getElementById(`publicPostContent-${this.editingPostId}`);
+        const postContentElement =
+    document.getElementById(`publicPostContent-${this.editingPostId}`) ||
+    document.getElementById(`postContent-${this.editingPostId}`);   // fallback للصفحة الشخصية
+
 if (postContentElement) {
-    renderPostContent(postContentElement, newContent);
+    // استخدام renderPostContent إن وُجد، وإلا processLinks، وإلا textContent
+    if (typeof window.renderPostContent === 'function') {
+        window.renderPostContent(postContentElement, newContent);
+    } else if (typeof window.processLinks === 'function') {
+        postContentElement.innerHTML = window.processLinks(newContent);
+    } else {
+        postContentElement.textContent = newContent;
+    }
+
+    // إضافة شارة "تم التعديل" (اختياري)
+    if (!postContentElement.parentElement.querySelector('.edited-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'edited-badge';
+        badge.style.cssText = 'color:#65676b;font-size:12px;margin-right:6px;';
+        badge.textContent = '(تم التعديل)';
+        postContentElement.parentElement.insertBefore(badge, postContentElement.nextSibling);
+    }
 }
-        }
         
         this.closeEditModal();
         this.showMessage('تم تحديث المنشور بنجاح', 'success');
