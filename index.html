@@ -11436,10 +11436,8 @@ window.fetchOgFromUrl = async function (rawUrl) {
     if (!url || !/^https?:\/\//i.test(url)) return null;
     if (window.__ogFailedUrls.has(url)) return null;
 
-    // 1) الكاش في الذاكرة
     if (window.ogCache[url]) return window.ogCache[url];
 
-    // 2) الكاش في localStorage
     try {
         const stored = localStorage.getItem('og_cache_' + url);
         if (stored) {
@@ -11451,7 +11449,6 @@ window.fetchOgFromUrl = async function (rawUrl) {
         }
     } catch (e) {}
 
-    // 3) جلب من الوسيط
     let domain = url;
     try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) {}
 
@@ -11480,7 +11477,6 @@ window.fetchOgFromUrl = async function (rawUrl) {
         return null;
     }
 
-    // 4) حفظ في الكاش
     window.ogCache[url] = resultData;
     try {
         localStorage.setItem('og_cache_' + url, JSON.stringify({
@@ -11675,17 +11671,17 @@ function processPostCard(card) {
     const scope = contentEl || card;
 
     let foundUrl = '';
-  const anchors = scope.querySelectorAll('a[href^="http"]');
-for (const a of anchors) {
-    if (a.closest('.post-menu, .public-post-options-menu, .post-actions, .public-post-actions')) continue;
-    if (a.closest('.post-og-container')) continue;
-    const href = a.getAttribute('href') || '';
-    if (!href) continue;
-    if (isYouTube(href)) continue;
-    if (isTemplateUrl(href)) continue;
-    foundUrl = href;
-    break;
-}
+    const anchors = scope.querySelectorAll('a[href^="http"]');
+    for (const a of anchors) {
+        if (a.closest('.post-menu, .public-post-options-menu, .post-actions, .public-post-actions')) continue;
+        if (a.closest('.post-og-container')) continue;
+        const href = a.getAttribute('href') || '';
+        if (!href) continue;
+        if (isYouTube(href)) continue;
+        if (isTemplateUrl(href)) continue;
+        foundUrl = href;
+        break;
+    }
 
     if (!foundUrl) {
         const txt = scope.innerText || scope.textContent || '';
