@@ -7925,7 +7925,6 @@ async loadVideosPage() {
                 </div>
             `;
 
-            // ربط الأحداث برمجياً لتجنب أي أخطاء نصية في HTML
             const likeBtn = videoCard.querySelector('.video-like-btn');
             const shareBtn = videoCard.querySelector('.video-share-btn');
 
@@ -7935,7 +7934,6 @@ async loadVideosPage() {
                     return;
                 }
                 await window.likePost(video.postId);
-                // تحديث فوري للزر والعداد دون إعادة تحميل الصفحة
                 const countSpan = likeBtn.querySelector('.v-like-count');
                 let currentCount = parseInt(countSpan.textContent.replace(/\D/g, '')) || 0;
                 if (likeBtn.classList.contains('liked')) {
@@ -7953,27 +7951,25 @@ async loadVideosPage() {
             });
 
             shareBtn.addEventListener('click', async () => {
-    if (!video.postId) {
-        if (video.url) {
-            navigator.clipboard.writeText(video.url);
-            alert('تم نسخ رابط الفيديو!');
-        }
-        return;
-    }
+                if (!video.postId) {
+                    if (video.url) {
+                        navigator.clipboard.writeText(video.url);
+                        alert('تم نسخ رابط الفيديو!');
+                    }
+                    return;
+                }
+                if (typeof window.shareUnifiedPost === 'function') {
+                    await window.shareUnifiedPost(video.postId);
+                } else if (typeof window.sharePost === 'function') {
+                    await window.sharePost(video.postId);
+                }
+                const countSpan = shareBtn.querySelector('.v-share-count');
+                let currentCount = (parseInt(countSpan.textContent.replace(/\D/g, '')) || 0) + 1;
+                countSpan.textContent = `(${currentCount})`;
+            });
 
-    // استدعاء الدالة الموحدة مع التحقق من وجودها
-    if (typeof window.shareUnifiedPost === 'function') {
-        await window.shareUnifiedPost(video.postId);
-    } else if (typeof window.sharePost === 'function') {
-        await window.sharePost(video.postId);
-    }
-
-    // تحديث العداد في واجهة بطاقة الفيديو
-    const countSpan = shareBtn.querySelector('.v-share-count');
-    let currentCount = (parseInt(countSpan.textContent.replace(/\D/g, '')) || 0) + 1;
-    countSpan.textContent = `(${currentCount})`;
-});
-
+            container.appendChild(videoCard);
+        });
 
     } catch (error) {
         console.error('Error loading videos page:', error);
@@ -7987,6 +7983,7 @@ async loadVideosPage() {
         }
     }
 }
+
 
 
         async editPost(postId) {
