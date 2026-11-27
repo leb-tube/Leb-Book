@@ -11871,21 +11871,35 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
 }
 
 // حقن النص بأمان
+const savedOninput  = editor.getAttribute('oninput');
+const savedOnchange = editor.getAttribute('onchange');
+if (savedOninput)  editor.removeAttribute('oninput');
+if (savedOnchange) editor.removeAttribute('onchange');
+
+// (ب) احقن النص
 editor.value = originalContent;
 
+// (ج) أطلق الأحداث — لا يوجد oninput الآن، فلا ReferenceError
 try {
     editor.dispatchEvent(new Event('input', { bubbles: true }));
     editor.dispatchEvent(new Event('change', { bubbles: true }));
 } catch (e) {
-    // حتى لو رمت inline handlers أخطاءً أخرى، نكمل
     console.warn('dispatch warning (non-fatal):', e);
 }
 
-// ضمان يدوي لارتفاع الحقل
-try { window.autoResizeTextarea(editor); } catch (_) {}
+// (د) أعد السمات كما كانت
+if (savedOninput)  editor.setAttribute('oninput', savedOninput);
+if (savedOnchange) editor.setAttribute('onchange', savedOnchange);
 
+// (هـ) اضبط ارتفاع الحقل يدوياً (بدون الاعتماد على دالة قد تكون مفقودة)
+try {
+    editor.style.overflowY = 'hidden';
+    editor.style.height = 'auto';
+    editor.style.height = editor.scrollHeight + 'px';
+} catch (_) {}
+
+// (و) ركّز الحقل
 editor.focus();
-
             // 6) نسخ الصور إن وُجدت ودعمت الدالة ذلك
             if (originalMedia.length && typeof window.addPostMedia === 'function') {
                 try { window.addPostMedia(originalMedia); } catch (e) { console.warn('media copy failed:', e); }
