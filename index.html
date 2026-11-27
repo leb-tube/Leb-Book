@@ -12478,37 +12478,6 @@ setInterval(() => {
     try { window.bindOgImageErrors(document); } catch (e) {}
 }, 3000);
 
-(async function fixBrokenPosts() {
-    const snap = await db.collection('posts').get();
-    let fixed = 0, scanned = 0;
-
-    for (const doc of snap.docs) {
-        scanned++;
-        const d = doc.data();
-        const updates = {};
-
-        // likes يجب أن تكون مصفوفة
-        if (d.likes !== undefined && !Array.isArray(d.likes)) {
-            updates.likes = [];
-        }
-        // comments يجب أن تكون مصفوفة (إن كان تطبيقك يستخدم مصفوفة)
-        if (d.comments !== undefined && !Array.isArray(d.comments) && typeof d.comments === 'number') {
-            // لا نلمسها هنا لتجنب تخريب عداد التعليقات — يُفضّل فحص تطبيقك
-            // updates.comments = [];
-        }
-        // تأكد من وجود حقول العدادات كأرقام
-        if (typeof d.shares !== 'number') updates.shares = 0;
-        if (typeof d.reposts !== 'number') updates.reposts = 0;
-        if (typeof d.likesCount !== 'number') updates.likesCount = Array.isArray(d.likes) ? d.likes.length : 0;
-
-        if (Object.keys(updates).length) {
-            await doc.ref.update(updates);
-            fixed++;
-            console.log('🔧 أُصلح:', doc.id, updates);
-        }
-    }
-    console.log(`✅ تم فحص ${scanned} منشوراً، وأُصلح ${fixed}.`);
-})();
 
   </script>
  
