@@ -11784,7 +11784,176 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
         '</div>';
 
     document.body.appendChild(modal);
+window.openRepostModal = async function (postId, shareUrl) {
+    // 1) جلب المنشور الأصلي
+    let data;
+    try {
+        const snap = await db.collection('posts').doc(postId).get();
+        if (!snap.exists) throw new Error('المنشور غير موجود');
+        data = snap.data();
+    } catch (e) {
+        console.error(e);
+        window.authSystem?.showMessage?.('تعذر تحميل المنشور', 'error');
+        return;
+    }
 
+    const originalContent = data.content || data.text || data.body || '';
+    const originalAuthor  = data.authorName || data.userName || data.displayName || 'مستخدم';
+    const originalMedia   = data.images || data.media || data.attachments || [];
+
+    // 2) حقن الأنماط (مرة واحدة فقط)
+    if (!document.getElementById('leb-repost-styles')) {
+        const style = document.createElement('style');
+        style.id = 'leb-repost-styles';
+        style.textContent = `
+            .repost-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 999999; direction: rtl; }
+            .repost-box { background: #fff; width: 92%; max-width: 480px; border-radius: 16px; padding: 20px; box-shadow: 0 12px 32px rgba(0,0,0,0.25); font-family: system-ui, sans-serif; max-height: 90vh; overflow-y: auto; }
+            .repost-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 14px; }
+            .repost-header h3 { margin: 0; font-size: 18px; color: #1c1e21; }
+            .repost-close { background: #f0f2f5; border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 20px; cursor: pointer; }
+            .repost-original { background: #f7f8fa; border-right: 3px solid #1877f2; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; color: #555; max-height: 100px; overflow-y: auto; }
+            .repost-original .author { font-weight: bold; color: #1c1e21; display: block; margin-bottom: 4px; }
+            .repost-textarea { width: 100%; min-height: 120px; max-height: 300px; border: 1px solid #ddd; border-radius: 10px; padding: 12px; font-size: 14px; font-family: inherit; resize: none; outline: none; box-sizing: border-box; overflow-y: auto; }
+            .repost-textarea:focus { border-color: #1877f2; }
+            .repost-link { display: flex; background: #f0f2f5; padding: 6px; border-radius: 8px; gap: 8px; margin-top: 10px; }
+            .repost-link input { flex: 1; border: none; background: transparent; padding: 6px; font-size: 12px; color: #555; outline: none; direction: ltr; }
+            .repost-link button { background: #1877f2; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+            .repost-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+            .repost-btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; font-size: 14px; }
+            .repost-btn-cancel { background: #f0f2f5; color: #333; }
+            .repost-btn-publish { background: #1877f2; color: #fff; }
+            .repost-btn-publish:disabled { opacity: 0.6; cursor: not-allowed; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // 3) بناء الحاوية
+    const modal = document.createElement('div');
+    modal.id = 'repost-modal';
+    modal.className = 'repost-overlay';
+    modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
+
+    modal.innerHTML =
+        '<div class="repost-box">' +
+            '<div class="repost-header">' +
+                '<h3>إعادة النشر</h3>' +
+                '<button type="button" class="repost-close" id="repost-close">&times;</button>' +
+            '</div>' +
+            '<div class="repost-original">' +
+                '<span class="author">' + escHtml(originalAuthor) + '</span>' +
+                escHtml(originalContent.slice(0, 200)) + (originalContent.length > 200 ? '…' : '') +
+            '</div>' +
+            '<textarea class="repost-textarea" id="repost-textarea" placeholder="عدّل المحتوى قبل النشر..."></textarea>' +
+            '<div class="repost-link">' +
+                '<input type="text" id="repost-link-input" readonly>' +
+                '<button type="button" id="repost-link-copy">نسخ</button>' +
+            '</div>' +
+            '<div class="repost-footer">' +
+                '<button type="button" class="repost-btn repost-btn-cancel" id="repost-cancel">إلغاء</button>' +
+                '<button type="button" class="repost-btn repost-btn-publish" id="repost-publish">نشر إعادة النشر</button>' +
+            '</div>' +
+        '</div>';
+
+    document.body.appendChild(modal);
+
+    // 4) تعبئة الحقول
+    const ta = document.getElementById('repost-textarea');
+    ta.value = originalContent;
+    autoResizeRepost(ta);
+    ta.addEventListener('input', () => autoResizeRepost(ta));
+    ta.focus();
+
+    document.getElementById('repost-link-input').value = shareUrl || '';
+
+    // 5) إغلاق
+    const close = () => modal.remove();
+    document.getElementById('repost-close').onclick = close;
+    document.getElementById('repost-cancel').onclick = close;
+
+    // 6) نسخ الرابط
+    document.getElementById('repost-link-copy').onclick = async function () {
+        try {
+            await navigator.clipboard.writeText(shareUrl || '');
+            window.authSystem?.showMessage?.('تم نسخ الرابط', 'success');
+        } catch (_) {}
+    };
+
+    // 7) النشر
+    const publishBtn = document.getElementById('repost-publish');
+    publishBtn.onclick = async function () {
+        const user = firebase.auth().currentUser;
+        if (!user) {
+            window.authSystem?.showMessage?.('يجب تسجيل الدخول أولاً', 'error');
+            return;
+        }
+
+        const content = ta.value.trim();
+        if (!content && originalMedia.length === 0) {
+            window.authSystem?.showMessage?.('المحتوى فارغ', 'error');
+            return;
+        }
+
+        publishBtn.disabled = true;
+        const originalLabel = publishBtn.textContent;
+        publishBtn.textContent = 'جارٍ النشر...';
+
+        try {
+            // ⚠️ عدّل أسماء الحقول لتطابق مخطط Firestore عندك
+            await db.collection('posts').add({
+                content: content,
+                text: content,
+                authorId: user.uid,
+                userId: user.uid,
+                authorName: user.displayName || user.email?.split('@')[0] || 'مستخدم',
+                userName: user.displayName || user.email?.split('@')[0] || 'مستخدم',
+                authorPhoto: user.photoURL || '',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                likes: 0,
+                comments: 0,
+                shares: 0,
+                reposts: 0,
+                images: originalMedia,
+                media: originalMedia,
+                repostOf: postId,
+                repostOfAuthor: originalAuthor
+            });
+
+            // زيادة عداد إعادات النشر للمنشور الأصلي
+            await db.collection('posts').doc(postId).update({
+                reposts: firebase.firestore.FieldValue.increment(1)
+            });
+
+            document.querySelectorAll('[data-repost-count="' + postId + '"]').forEach(function (s) {
+                s.textContent = (parseInt(s.textContent) || 0) + 1;
+            });
+
+            window.authSystem?.showMessage?.('تمت إعادة النشر بنجاح', 'success');
+            close();
+
+            // محاولة تحديث التغذية
+            try {
+                if (typeof window.loadPosts === 'function') window.loadPosts();
+                else if (typeof window.refreshFeed === 'function') window.refreshFeed();
+                else if (typeof window.renderPosts === 'function') window.renderPosts();
+            } catch (_) {}
+        } catch (err) {
+            console.error(err);
+            window.authSystem?.showMessage?.('تعذر النشر، حاول مجدداً', 'error');
+            publishBtn.disabled = false;
+            publishBtn.textContent = originalLabel;
+        }
+    };
+
+    // دوال مساعدة
+    function autoResizeRepost(el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 300) + 'px';
+    }
+    function escHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+};
     // ---------- دالة زيادة عداد المشاركات الخارجية ----------
     const registerShare = async function() {
         try {
@@ -11804,119 +11973,10 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
     document.getElementById('btn-share-fb').onclick = registerShare;
 
     // ---------- إعادة النشر: فتح المحرّر مع نسخ المحتوى ----------
-    document.getElementById('btn-share-repost').onclick = async function () {
-        const btn = this;
-        btn.disabled = true;
-
-        try {
-            // 1) جلب المنشور الأصلي
-            const snap = await db.collection('posts').doc(postId).get();
-            if (!snap.exists) throw new Error('المنشور غير موجود');
-            const data = snap.data();
-            const originalContent = data.content || data.text || data.body || '';
-            const originalMedia = data.images || data.media || data.attachments || [];
-
-            // 2) إغلاق نافذة المشاركة
-            modal.remove();
-
-            // 3) فتح محرّر المنشور
-            if (typeof window.openPostComposer === 'function') {
-                window.openPostComposer();
-            } else if (typeof window.showCreatePost === 'function') {
-                window.showCreatePost();
-            } else if (typeof window.openCreatePostModal === 'function') {
-                window.openCreatePostModal();
-            } else {
-                const opener = document.querySelector(
-                    '[onclick*="openPost"], [onclick*="showPost"], [onclick*="composer"], [data-open-composer]'
-                );
-                if (opener) opener.click();
-            }
-
-            // 4) انتظار ظهور حقل النص (حتى 1.5 ثانية)
-            let editor = null;
-            for (let i = 0; i < 15; i++) {
-                editor = document.querySelector(
-                    '#postContent, #post-textarea, textarea[name="content"], .post-composer textarea, textarea[placeholder*="منشور"], textarea[placeholder*="اكتب"]'
-                );
-                if (editor) break;
-                await new Promise(r => setTimeout(r, 100));
-            }
-
-            if (!editor) {
-                console.warn('لم يتم العثور على محرّر المنشور');
-                window.authSystem?.showMessage?.('افتح محرّر المنشور يدوياً ثم أعد المحاولة', 'error');
-                return;
-            }
-
-            // 5) حقن النص وإشعار الواجهة (محمي من أخطاء inline handlers)
-                editor.value = originalContent;
-
-            try {
-               editor.dispatchEvent(new Event('input', { bubbles: true }));
-               editor.dispatchEvent(new Event('change', { bubbles: true }));
-            } catch (e) {
-       // إن كان oninput يستدعي دوال غير معرّفة (مثل autoResizeTextarea) نكمل بدون توقف
-              console.warn('input/change dispatch warning:', e);
-            }
-
-      // ضمان يدوي لضبط ارتفاع الحقل حتى لو فشل الـ handler
-         if (typeof window.autoResizeTextarea !== 'function') {
-    window.autoResizeTextarea = function (el) {
-        if (!el || el.tagName !== 'TEXTAREA') return;
-        el.style.overflowY = 'hidden';
-        el.style.height = 'auto';
-        el.style.height = el.scrollHeight + 'px';
-    };
-}
-
-// حقن النص بأمان
-const savedOninput  = editor.getAttribute('oninput');
-const savedOnchange = editor.getAttribute('onchange');
-if (savedOninput)  editor.removeAttribute('oninput');
-if (savedOnchange) editor.removeAttribute('onchange');
-
-editor.value = originalContent;
-
-try {
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
-    editor.dispatchEvent(new Event('change', { bubbles: true }));
-} catch (e) {
-    console.warn('dispatch warning (non-fatal):', e);
-}
-
-if (savedOninput)  editor.setAttribute('oninput', savedOninput);
-if (savedOnchange) editor.setAttribute('onchange', savedOnchange);
-
-try {
-    editor.style.overflowY = 'hidden';
-    editor.style.height = 'auto';
-    editor.style.height = editor.scrollHeight + 'px';
-} catch (_) {}
-
-editor.focus();
-            // 6) نسخ الصور إن وُجدت ودعمت الدالة ذلك
-            if (originalMedia.length && typeof window.addPostMedia === 'function') {
-                try { window.addPostMedia(originalMedia); } catch (e) { console.warn('media copy failed:', e); }
-            }
-
-            // 7) حفظ مرجع المنشور الأصلي لاستخدامه عند النشر
-            window.__repostOf = postId;
-
-            // 8) تصفير المرجع عند إلغاء المحرّر
-            const clearRepost = () => { window.__repostOf = null; };
-            const cancelBtn = document.querySelector(
-                '#cancelPost, .cancel-post, [data-close-composer], #closePostModal'
-            );
-            if (cancelBtn) cancelBtn.addEventListener('click', clearRepost, { once: true });
-
-            window.authSystem?.showMessage?.('تم نسخ محتوى المنشور، عدّله ثم اضغط نشر', 'info');
-        } catch (err) {
-            console.error(err);
-            btn.disabled = false;
-            window.authSystem?.showMessage?.('تعذر تحميل المنشور، حاول لاحقاً', 'error');
-        }
-    };
+     document.getElementById('btn-share-repost').onclick = function () {
+    modal.remove();
+    window.openRepostModal(postId, shareUrl);
+};
 
     // ---------- نسخ الرابط ----------
     document.getElementById('btn-share-copy').onclick = async function() {
