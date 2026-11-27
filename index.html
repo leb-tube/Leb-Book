@@ -6866,7 +6866,7 @@ stopAllMedia() {
         </div>
         ${mediaContent}
                 <div class="post-actions">
-            <button class="action-btn ${post.likes?.includes(window.authSystem?.currentUser?.uid) ? 'liked' : ''}" 
+            <button class="action-btn ${Array.isArray(post.likes) && post.likes.includes(window.authSystem?.currentUser?.uid) ? 'liked' : ''}
                     data-like-btn="${postId}" onclick="window.toggleUnifiedLike('${postId}', this)"
                     style="${post.likes?.includes(window.authSystem?.currentUser?.uid) ? 'color:#1877f2;' : ''}">
                 <i class="${post.likes?.includes(window.authSystem?.currentUser?.uid) ? 'fas' : 'far'} fa-thumbs-up"></i>
@@ -11909,10 +11909,13 @@ window.openRepostModal = async function (postId, shareUrl) {
                 authorPhoto: user.photoURL || '',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                likes: 0,
-                comments: 0,
-                shares: 0,
-                reposts: 0,
+likes: [],
+comments: [],
+shares: 0,
+reposts: 0,
+likedBy: [],
+likesCount: 0,
+commentsCount: 0,
                 images: originalMedia,
                 media: originalMedia,
                 repostOf: postId,
