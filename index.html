@@ -8355,7 +8355,8 @@ if (postContentElement) {
             const year = date.getFullYear();
             return year.toString();
         } catch (error) {
-            return '٢٠٢٣';
+            retu
+            rn '٢٠٢٣';
         }
     }
 
@@ -12387,35 +12388,50 @@ setInterval(() => {
     try { window.bindOgImageErrors(document); } catch (e) {}
 }, 3000);
 
- (function () {
-    if (typeof window.createPost !== 'function' || window.__createPostWrapped) return;
-    const original = window.createPost;
+(function () {
+    if (window.__createPostWrapped) return;
 
-    window.createPost = async function () {
-        const result = await original.apply(this, arguments);
+    var attempts = 0, maxAttempts = 50;
 
-        // لا نعدّ إعادة نشر إلا إذا نجح النشر فعلاً
-        const succeeded = result !== false && result !== null;
-        if (succeeded && window.__repostOf) {
-            const originalId = window.__repostOf;
-            window.__repostOf = null;
-            try {
-                await db.collection('posts').doc(originalId).update({
-                    reposts: firebase.firestore.FieldValue.increment(1)
-                });
-                document.querySelectorAll('[data-repost-count="' + originalId + '"]').forEach(function (s) {
-                    s.textContent = (parseInt(s.textContent) || 0) + 1;
-                });
-            } catch (e) {
-                console.error('repost counter:', e);
+    function tryWrap() {
+        if (window.__createPostWrapped) return;
+
+        if (typeof window.createPost !== 'function') {
+            if (++attempts >= maxAttempts) {
+                console.warn('createPost not found after 5s — repost counter disabled');
+                return;
             }
+            return setTimeout(tryWrap, 100);
         }
-        return result;
-    };
 
-    window.__createPostWrapped = true;
+        const original = window.createPost;
+
+        window.createPost = async function () {
+            const result = await original.apply(this, arguments);
+            const succeeded = result !== false && result !== null;
+
+            if (succeeded && window.__repostOf) {
+                const originalId = window.__repostOf;
+                window.__repostOf = null;
+                try {
+                    await db.collection('posts').doc(originalId).update({
+                        reposts: firebase.firestore.FieldValue.increment(1)
+                    });
+                    document.querySelectorAll('[data-repost-count="' + originalId + '"]').forEach(function (s) {
+                        s.textContent = (parseInt(s.textContent) || 0) + 1;
+                    });
+                } catch (e) {
+                    console.error('repost counter:', e);
+                }
+            }
+            return result;
+        };
+
+        window.__createPostWrapped = true;
+    }
+
+    tryWrap();
 })();
-
 
 
   </script>
