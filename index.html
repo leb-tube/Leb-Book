@@ -11726,7 +11726,13 @@ window.shareUnifiedPost = async function(postId) {
 };
 
 // دالة إنشاء النافذة المنبثقة الشبيهة بفيسبوك وتويتر
+// متغير لتخزين بيانات المنشور الحالي بأمان بعيداً عن أخطاء علامات الاقتباس
+window.currentShareData = {};
+
 window.openCustomShareModal = function(postId, shareUrl, shareText) {
+    // حفظ البيانات في الذاكرة لتجنب كسر كود HTML
+    window.currentShareData = { postId, shareUrl, shareText };
+
     if (!document.getElementById('leb-book-share-styles')) {
         const style = document.createElement('style');
         style.id = 'leb-book-share-styles';
@@ -11752,9 +11758,6 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
     const existingModal = document.getElementById('custom-share-modal');
     if (existingModal) existingModal.remove();
 
-    const encodedUrl = encodeURIComponent(shareUrl);
-    const encodedText = encodeURIComponent(shareText);
-
     const modalHTML = `
     <div id="custom-share-modal" class="share-modal-overlay" onclick="if(event.target === this) this.remove()">
         <div class="share-modal-box">
@@ -11764,19 +11767,19 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
             </div>
             
             <div class="share-options-grid">
-                <button class="share-option-btn" onclick="handleSocialShare('${postId}', 'repost')">
+                <button class="share-option-btn" onclick="handleSocialShare('repost')">
                     <span class="icon">🔁</span>
                     <span>إعادة نشر</span>
                 </button>
-                <button class="share-option-btn" onclick="handleSocialShare('${postId}', 'whatsapp', 'https://whatsapp.com{encodedText}%20${encodedUrl}')">
+                <button class="share-option-btn" onclick="handleSocialShare('whatsapp')">
                     <span class="icon">💬</span>
                     <span>واتساب</span>
                 </button>
-                <button class="share-option-btn" onclick="handleSocialShare('${postId}', 'twitter', 'https://twitter.com{encodedText}&url=${encodedUrl}')">
+                <button class="share-option-btn" onclick="handleSocialShare('twitter')">
                     <span class="icon">𝕏</span>
                     <span>منصة X</span>
                 </button>
-                <button class="share-option-btn" onclick="handleSocialShare('${postId}', 'facebook', 'https://facebook.com{encodedUrl}')">
+                <button class="share-option-btn" onclick="handleSocialShare('facebook')">
                     <span class="icon">📘</span>
                     <span>فيسبوك</span>
                 </button>
@@ -11784,13 +11787,55 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
 
             <div class="share-link-box">
                 <input type="text" value="${shareUrl}" readonly>
-                <button onclick="handleSocialShare('${postId}', 'copy', '${shareUrl}')">نسخ</button>
+                <button onclick="handleSocialShare('copy')">نسخ</button>
             </div>
         </div>
     </div>`;
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 };
+
+window.handleSocialShare = async function(type) {
+    const { postId, shareUrl, shareText } = window.currentShareData;
+    if (!postId) return;
+
+    const encodedUrl = encodeURIComponent(shareUrl);
+    const encodedText = encodeURIComponent(shareText);
+
+    try {
+        if (type === 'copy') {
+            await navigator.clipboard.writeText(shareUrl);
+            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
+                window.authSystem.showMessage('تم نسخ رابط المنشور إلى الحافظة!', 'success');
+            }
+        } else if (type === 'repost') {
+            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
+                window.authSystem.showMessage('تمت مشاركة المنشور في ملفك الشخصي!', 'success');
+            }
+        } else if (type === 'whatsapp') {
+            window.open(`https://wa.me{encodedText}%20${encodedUrl}`, '_blank');
+        } else if (type === 'twitter') {
+            window.open(`https://x.com{encodedText}&url=${encodedUrl}`, '_blank');
+        } else if (type === 'facebook') {
+            window.open(`https://facebook.com{encodedUrl}`, '_blank');
+        }
+
+        // تحديث عداد المشاركات في Firebase والواجهة
+        await db.collection('posts').doc(postId).update({
+            shares: firebase.firestore.FieldValue.increment(1)
+        });
+
+        document.querySelectorAll(`[data-share-count="${postId}"]`).forEach(span => {
+            span.textContent = (parseInt(span.textContent) || 0) + 1;
+        });
+
+        const modal = document.getElementById('custom-share-modal');
+        if (modal) modal.remove();
+    } catch (error) {
+        console.error('❌ خطأ أثناء تنفيذ المشاركة:', error);
+    }
+};
+
 
 // دالة تنفيذ المشاركة وزيادة العداد في Firebase عند اختيار المستخدم لمنصة
 window.handleSocialShare = async function(postId, type, targetUrl = '') {
