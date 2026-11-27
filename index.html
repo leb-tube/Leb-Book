@@ -11737,6 +11737,7 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
             .share-options-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
             .share-option-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; padding: 8px 4px; border-radius: 12px; font-size: 13px; color: #333; text-decoration: none; }
             .share-option-btn:hover { background: #f0f2f5; }
+            .share-option-btn:disabled { opacity: 0.5; cursor: not-allowed; }
             .share-option-btn .icon { font-size: 22px; background: #f0f2f5; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
             .share-link-box { display: flex; background: #f0f2f5; padding: 6px; border-radius: 10px; gap: 8px; }
             .share-link-box input { flex: 1; border: none; background: transparent; padding: 6px; font-size: 13px; color: #555; outline: none; direction: ltr; }
@@ -11748,13 +11749,16 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
     const existingModal = document.getElementById('custom-share-modal');
     if (existingModal) existingModal.remove();
 
+    // هروب آمن للسمات
+    const escAttr = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
     const encUrl = encodeURIComponent(shareUrl);
     const encText = encodeURIComponent(shareText);
 
-   // بناء الروابط الصحيحة للمنصات
-const waLink = 'https://wa.me/?text=' + encodeURIComponent(shareText + ' ' + shareUrl);
-const xLink = 'https://x.com/intent/tweet?text=' + encText + '&url=' + encUrl;
-const fbLink = 'https://www.facebook.com/sharer/sharer.php?u=' + encUrl;
+    // بناء الروابط الصحيحة للمنصات
+    const waLink = 'https://wa.me/?text=' + encodeURIComponent(shareText + ' ' + shareUrl);
+    const xLink = 'https://x.com/intent/tweet?text=' + encText + '&url=' + encUrl;
+    const fbLink = 'https://www.facebook.com/sharer/sharer.php?u=' + encUrl;
 
     const modal = document.createElement('div');
     modal.id = 'custom-share-modal';
@@ -11774,14 +11778,14 @@ const fbLink = 'https://www.facebook.com/sharer/sharer.php?u=' + encUrl;
                 '<a href="' + fbLink + '" target="_blank" rel="noopener" class="share-option-btn" id="btn-share-fb"><span class="icon">📘</span><span>فيسبوك</span></a>' +
             '</div>' +
             '<div class="share-link-box">' +
-                '<input type="text" value="' + shareUrl + '" readonly>' +
+                '<input type="text" value="' + escAttr(shareUrl) + '" readonly>' +
                 '<button type="button" id="btn-share-copy">نسخ</button>' +
             '</div>' +
         '</div>';
 
     document.body.appendChild(modal);
 
-    // دالة تحديث العداد وإغلاق النافذة
+    // ---------- دالة زيادة عداد المشاركات الخارجية ----------
     const registerShare = async function() {
         try {
             await db.collection('posts').doc(postId).update({
@@ -11790,7 +11794,7 @@ const fbLink = 'https://www.facebook.com/sharer/sharer.php?u=' + encUrl;
             document.querySelectorAll('[data-share-count="' + postId + '"]').forEach(function(span) {
                 span.textContent = (parseInt(span.textContent) || 0) + 1;
             });
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error('share counter:', err); }
         modal.remove();
     };
 
@@ -11799,23 +11803,94 @@ const fbLink = 'https://www.facebook.com/sharer/sharer.php?u=' + encUrl;
     document.getElementById('btn-share-x').onclick = registerShare;
     document.getElementById('btn-share-fb').onclick = registerShare;
 
-    document.getElementById('btn-share-repost').onclick = function() {
-        if (window.authSystem && window.authSystem.showMessage) {
-            window.authSystem.showMessage('تمت مشاركة المنشور في ملفك الشخصي!', 'success');
+    // ---------- إعادة النشر: فتح المحرّر مع نسخ المحتوى ----------
+    document.getElementById('btn-share-repost').onclick = async function () {
+        const btn = this;
+        btn.disabled = true;
+
+        try {
+            // 1) جلب المنشور الأصلي
+            const snap = await db.collection('posts').doc(postId).get();
+            if (!snap.exists) throw new Error('المنشور غير موجود');
+            const data = snap.data();
+            const originalContent = data.content || data.text || data.body || '';
+            const originalMedia = data.images || data.media || data.attachments || [];
+
+            // 2) إغلاق نافذة المشاركة
+            modal.remove();
+
+            // 3) فتح محرّر المنشور
+            if (typeof window.openPostComposer === 'function') {
+                window.openPostComposer();
+            } else if (typeof window.showCreatePost === 'function') {
+                window.showCreatePost();
+            } else if (typeof window.openCreatePostModal === 'function') {
+                window.openCreatePostModal();
+            } else {
+                const opener = document.querySelector(
+                    '[onclick*="openPost"], [onclick*="showPost"], [onclick*="composer"], [data-open-composer]'
+                );
+                if (opener) opener.click();
+            }
+
+            // 4) انتظار ظهور حقل النص (حتى 1.5 ثانية)
+            let editor = null;
+            for (let i = 0; i < 15; i++) {
+                editor = document.querySelector(
+                    '#postContent, #post-textarea, textarea[name="content"], .post-composer textarea, textarea[placeholder*="منشور"], textarea[placeholder*="اكتب"]'
+                );
+                if (editor) break;
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+            if (!editor) {
+                console.warn('لم يتم العثور على محرّر المنشور');
+                window.authSystem?.showMessage?.('افتح محرّر المنشور يدوياً ثم أعد المحاولة', 'error');
+                return;
+            }
+
+            // 5) حقن النص وإشعار الواجهة
+            editor.value = originalContent;
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+            editor.dispatchEvent(new Event('change', { bubbles: true }));
+            editor.focus();
+
+            // 6) نسخ الصور إن وُجدت ودعمت الدالة ذلك
+            if (originalMedia.length && typeof window.addPostMedia === 'function') {
+                try { window.addPostMedia(originalMedia); } catch (e) { console.warn('media copy failed:', e); }
+            }
+
+            // 7) حفظ مرجع المنشور الأصلي لاستخدامه عند النشر
+            window.__repostOf = postId;
+
+            // 8) تصفير المرجع عند إلغاء المحرّر
+            const clearRepost = () => { window.__repostOf = null; };
+            const cancelBtn = document.querySelector(
+                '#cancelPost, .cancel-post, [data-close-composer], #closePostModal'
+            );
+            if (cancelBtn) cancelBtn.addEventListener('click', clearRepost, { once: true });
+
+            window.authSystem?.showMessage?.('تم نسخ محتوى المنشور، عدّله ثم اضغط نشر', 'info');
+        } catch (err) {
+            console.error(err);
+            btn.disabled = false;
+            window.authSystem?.showMessage?.('تعذر تحميل المنشور، حاول لاحقاً', 'error');
         }
-        registerShare();
     };
 
+    // ---------- نسخ الرابط ----------
     document.getElementById('btn-share-copy').onclick = async function() {
-        await navigator.clipboard.writeText(shareUrl);
-        if (window.authSystem && window.authSystem.showMessage) {
-            window.authSystem.showMessage('تم نسخ رابط المنشور!', 'success');
+        try {
+            await navigator.clipboard.writeText(shareUrl);
+            window.authSystem?.showMessage?.('تم نسخ رابط المنشور!', 'success');
+        } catch (e) {
+            console.error('copy:', e);
+            window.authSystem?.showMessage?.('تعذر النسخ، انسخه يدوياً', 'error');
+            return;
         }
         registerShare();
     };
 };
-
-
 // ============================================================
 // إصلاح الحذف المتتالي للمنشورات في الصفحة الرئيسية والعامة
 // ============================================================
@@ -12300,7 +12375,34 @@ setInterval(() => {
     try { window.bindOgImageErrors(document); } catch (e) {}
 }, 3000);
 
- 
+ (function () {
+    if (typeof window.createPost !== 'function' || window.__createPostWrapped) return;
+    const original = window.createPost;
+
+    window.createPost = async function () {
+        const result = await original.apply(this, arguments);
+
+        // لا نعدّ إعادة نشر إلا إذا نجح النشر فعلاً
+        const succeeded = result !== false && result !== null;
+        if (succeeded && window.__repostOf) {
+            const originalId = window.__repostOf;
+            window.__repostOf = null;
+            try {
+                await db.collection('posts').doc(originalId).update({
+                    reposts: firebase.firestore.FieldValue.increment(1)
+                });
+                document.querySelectorAll('[data-repost-count="' + originalId + '"]').forEach(function (s) {
+                    s.textContent = (parseInt(s.textContent) || 0) + 1;
+                });
+            } catch (e) {
+                console.error('repost counter:', e);
+            }
+        }
+        return result;
+    };
+
+    window.__createPostWrapped = true;
+})();
 
 
 
