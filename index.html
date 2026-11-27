@@ -11796,50 +11796,6 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 };
-
-window.handleSocialShare = async function(type) {
-    const { postId, shareUrl, shareText } = window.currentShareData;
-    if (!postId) return;
-
-    const encodedUrl = encodeURIComponent(shareUrl);
-    const encodedText = encodeURIComponent(shareText);
-
-    try {
-        if (type === 'copy') {
-            await navigator.clipboard.writeText(shareUrl);
-            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
-                window.authSystem.showMessage('تم نسخ رابط المنشور إلى الحافظة!', 'success');
-            }
-        } else if (type === 'repost') {
-            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
-                window.authSystem.showMessage('تمت مشاركة المنشور في ملفك الشخصي!', 'success');
-            }
-        } else if (type === 'whatsapp') {
-            window.open(`https://wa.me{encodedText}%20${encodedUrl}`, '_blank');
-        } else if (type === 'twitter') {
-            window.open(`https://x.com{encodedText}&url=${encodedUrl}`, '_blank');
-        } else if (type === 'facebook') {
-            window.open(`https://facebook.com{encodedUrl}`, '_blank');
-        }
-
-        // تحديث عداد المشاركات في Firebase والواجهة
-        await db.collection('posts').doc(postId).update({
-            shares: firebase.firestore.FieldValue.increment(1)
-        });
-
-        document.querySelectorAll(`[data-share-count="${postId}"]`).forEach(span => {
-            span.textContent = (parseInt(span.textContent) || 0) + 1;
-        });
-
-        const modal = document.getElementById('custom-share-modal');
-        if (modal) modal.remove();
-    } catch (error) {
-        console.error('❌ خطأ أثناء تنفيذ المشاركة:', error);
-    }
-};
-
- 
-
 window.handleSocialShare = async function(type) {
     const { postId, shareUrl, shareText } = window.currentShareData;
     if (!postId) return;
@@ -11881,42 +11837,6 @@ window.handleSocialShare = async function(type) {
     }
 };
 
-
-
-// دالة تنفيذ المشاركة وزيادة العداد في Firebase عند اختيار المستخدم لمنصة
-window.handleSocialShare = async function(postId, type, targetUrl = '') {
-    try {
-        if (type === 'copy') {
-            await navigator.clipboard.writeText(targetUrl);
-            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
-                window.authSystem.showMessage('تم نسخ رابط المنشور إلى الحافظة!', 'success');
-            }
-        } else if (type === 'repost') {
-            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
-                window.authSystem.showMessage('تمت مشاركة المنشور في ملفك الشخصي!', 'success');
-            }
-        } else if (targetUrl) {
-            window.open(targetUrl, '_blank', 'width=600,height=450');
-        }
-
-        // زيادة عداد المشاركات في قاعدة البيانات والواجهة بعد الفعل الفعلي
-        await db.collection('posts').doc(postId).update({
-            shares: firebase.firestore.FieldValue.increment(1)
-        });
-
-        document.querySelectorAll(`[data-share-count="${postId}"]`).forEach(span => {
-            span.textContent = (parseInt(span.textContent) || 0) + 1;
-        });
-
-        const modal = document.getElementById('custom-share-modal');
-        if (modal) modal.remove();
-    } catch (error) {
-        console.error('❌ خطأ أثناء تنفيذ المشاركة:', error);
-    }
-};
-
-
- 
 // ============================================================
 // إصلاح الحذف المتتالي للمنشورات في الصفحة الرئيسية والعامة
 // ============================================================
@@ -12468,24 +12388,7 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
     document.body.insertAdjacentHTML('beforeend', modalHTML);
 };
 
-window.handleSocialShare = async function(postId, type, targetUrl = '') {
-    if (type === 'copy') {
-        await navigator.clipboard.writeText(targetUrl);
-        if (window.authSystem) window.authSystem.showMessage('تم نسخ رابط المنشور!', 'success');
-    } else if (type === 'repost') {
-        if (window.authSystem) window.authSystem.showMessage('تمت مشاركة المنشور في ملفك الشخصي!', 'success');
-    } else if (targetUrl) {
-        window.open(targetUrl, '_blank', 'width=600,height=450');
-    }
 
-    // تحديث عداد المشاركات في Firebase والواجهة
-    if (typeof shareUnifiedPost === 'function') {
-        await shareUnifiedPost(postId);
-    }
-
-    const modal = document.getElementById('custom-share-modal');
-    if (modal) modal.remove();
-};
 
   </script>
  
