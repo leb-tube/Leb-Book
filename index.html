@@ -11724,47 +11724,97 @@ window.shareUnifiedPost = async function(postId) {
         console.error('❌ خطأ في مشاركة المنشور:', error);
     }
 };
-
-window.handleSocialShare = async function(type) {
-    const { postId, shareUrl, shareText } = window.currentShareData;
-    if (!postId) return;
-
-    const encodedUrl = encodeURIComponent(shareUrl);
-    const encodedText = encodeURIComponent(shareText);
-
-    try {
-        if (type === 'copy') {
-            await navigator.clipboard.writeText(shareUrl);
-            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
-                window.authSystem.showMessage('تم نسخ رابط المنشور إلى الحافظة!', 'success');
-            }
-        } else if (type === 'repost') {
-            if (window.authSystem && typeof window.authSystem.showMessage === 'function') {
-                window.authSystem.showMessage('تمت مشاركة المنشور في ملفك الشخصي!', 'success');
-            }
-        } else if (type === 'whatsapp') {
-            window.open('https://whatsapp.com' + encodedText + '%20' + encodedUrl, '_blank');
-        } else if (type === 'twitter') {
-            window.open('https://twitter.com' + encodedText + '&url=' + encodedUrl, '_blank');
-        } else if (type === 'facebook') {
-            window.open('https://facebook.com' + encodedUrl, '_blank');
-        }
-
-        // تحديث عداد المشاركات في Firebase والواجهة
-        await db.collection('posts').doc(postId).update({
-            shares: firebase.firestore.FieldValue.increment(1)
-        });
-
-        document.querySelectorAll('[data-share-count="' + postId + '"]').forEach(span => {
-            span.textContent = (parseInt(span.textContent) || 0) + 1;
-        });
-
-        const modal = document.getElementById('custom-share-modal');
-        if (modal) modal.remove();
-    } catch (error) {
-        console.error('❌ خطأ أثناء تنفيذ المشاركة:', error);
+window.openCustomShareModal = function(postId, shareUrl, shareText) {
+    if (!document.getElementById('leb-book-share-styles')) {
+        const style = document.createElement('style');
+        style.id = 'leb-book-share-styles';
+        style.textContent = `
+            .share-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 999999; direction: rtl; }
+            .share-modal-box { background: #fff; width: 92%; max-width: 420px; border-radius: 16px; padding: 20px; box-shadow: 0 12px 32px rgba(0,0,0,0.25); font-family: system-ui, sans-serif; }
+            .share-modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 16px; }
+            .share-modal-header h3 { margin: 0; font-size: 18px; color: #1c1e21; }
+            .close-btn { background: #f0f2f5; border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 20px; cursor: pointer; }
+            .share-options-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+            .share-option-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; padding: 8px 4px; border-radius: 12px; font-size: 13px; color: #333; text-decoration: none; }
+            .share-option-btn:hover { background: #f0f2f5; }
+            .share-option-btn .icon { font-size: 22px; background: #f0f2f5; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+            .share-link-box { display: flex; background: #f0f2f5; padding: 6px; border-radius: 10px; gap: 8px; }
+            .share-link-box input { flex: 1; border: none; background: transparent; padding: 6px; font-size: 13px; color: #555; outline: none; direction: ltr; }
+            .share-link-box button { background: #1877f2; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        `;
+        document.head.appendChild(style);
     }
+
+    const existingModal = document.getElementById('custom-share-modal');
+    if (existingModal) existingModal.remove();
+
+    const encUrl = encodeURIComponent(shareUrl);
+    const encText = encodeURIComponent(shareText);
+
+    // بناء الروابط الصحيحة للمنصات
+    const waLink = 'https://whatsapp.com' + encText + '%20' + encUrl;
+    const xLink = 'https://twitter.com' + encText + '&url=' + encUrl;
+    const fbLink = 'https://facebook.com' + encUrl;
+
+    const modal = document.createElement('div');
+    modal.id = 'custom-share-modal';
+    modal.className = 'share-modal-overlay';
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+
+    modal.innerHTML =
+        '<div class="share-modal-box">' +
+            '<div class="share-modal-header">' +
+                '<h3>مشاركة المنشور</h3>' +
+                '<button type="button" class="close-btn" id="close-share-modal">&times;</button>' +
+            '</div>' +
+            '<div class="share-options-grid">' +
+                '<button type="button" class="share-option-btn" id="btn-share-repost"><span class="icon">🔁</span><span>إعادة نشر</span></button>' +
+                '<a href="' + waLink + '" target="_blank" rel="noopener" class="share-option-btn" id="btn-share-wa"><span class="icon">💬</span><span>واتساب</span></a>' +
+                '<a href="' + xLink + '" target="_blank" rel="noopener" class="share-option-btn" id="btn-share-x"><span class="icon">𝕏</span><span>منصة X</span></a>' +
+                '<a href="' + fbLink + '" target="_blank" rel="noopener" class="share-option-btn" id="btn-share-fb"><span class="icon">📘</span><span>فيسبوك</span></a>' +
+            '</div>' +
+            '<div class="share-link-box">' +
+                '<input type="text" value="' + shareUrl + '" readonly>' +
+                '<button type="button" id="btn-share-copy">نسخ</button>' +
+            '</div>' +
+        '</div>';
+
+    document.body.appendChild(modal);
+
+    // دالة تحديث العداد وإغلاق النافذة
+    const registerShare = async function() {
+        try {
+            await db.collection('posts').doc(postId).update({
+                shares: firebase.firestore.FieldValue.increment(1)
+            });
+            document.querySelectorAll('[data-share-count="' + postId + '"]').forEach(function(span) {
+                span.textContent = (parseInt(span.textContent) || 0) + 1;
+            });
+        } catch (err) { console.error(err); }
+        modal.remove();
+    };
+
+    document.getElementById('close-share-modal').onclick = function() { modal.remove(); };
+    document.getElementById('btn-share-wa').onclick = registerShare;
+    document.getElementById('btn-share-x').onclick = registerShare;
+    document.getElementById('btn-share-fb').onclick = registerShare;
+
+    document.getElementById('btn-share-repost').onclick = function() {
+        if (window.authSystem && window.authSystem.showMessage) {
+            window.authSystem.showMessage('تمت مشاركة المنشور في ملفك الشخصي!', 'success');
+        }
+        registerShare();
+    };
+
+    document.getElementById('btn-share-copy').onclick = async function() {
+        await navigator.clipboard.writeText(shareUrl);
+        if (window.authSystem && window.authSystem.showMessage) {
+            window.authSystem.showMessage('تم نسخ رابط المنشور!', 'success');
+        }
+        registerShare();
+    };
 };
+
 
 // ============================================================
 // إصلاح الحذف المتتالي للمنشورات في الصفحة الرئيسية والعامة
@@ -12250,73 +12300,7 @@ setInterval(() => {
     try { window.bindOgImageErrors(document); } catch (e) {}
 }, 3000);
 
-   window.currentShareData = {}; 
-window.openCustomShareModal = function(postId, shareUrl, shareText) {
-    // 1. إضافة التنسيقات تلقائياً إن لم تكن موجودة
-    if (!document.getElementById('leb-book-share-styles')) {
-        const style = document.createElement('style');
-        style.id = 'leb-book-share-styles';
-        style.textContent = `
-            .share-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 999999; direction: rtl; animation: fadeIn 0.2s ease; }
-            .share-modal-box { background: #fff; width: 92%; max-width: 420px; border-radius: 16px; padding: 20px; box-shadow: 0 12px 32px rgba(0,0,0,0.25); font-family: system-ui, -apple-system, sans-serif; }
-            .share-modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 16px; }
-            .share-modal-header h3 { margin: 0; font-size: 18px; color: #1c1e21; }
-            .close-btn { background: #f0f2f5; border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 20px; cursor: pointer; color: #606770; display: flex; align-items: center; justify-content: center; }
-            .share-options-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
-            .share-option-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; padding: 8px 4px; border-radius: 12px; font-size: 13px; color: #333; transition: 0.2s; }
-            .share-option-btn:hover { background: #f0f2f5; transform: translateY(-2px); }
-            .share-option-btn .icon { font-size: 22px; background: #f0f2f5; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
-            .share-link-box { display: flex; background: #f0f2f5; padding: 6px; border-radius: 10px; gap: 8px; border: 1px solid #e4e6eb; }
-            .share-link-box input { flex: 1; border: none; background: transparent; padding: 6px; font-size: 13px; color: #555; outline: none; direction: ltr; }
-            .share-link-box button { background: #1877f2; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-            .share-link-box button:hover { background: #166fe5; }
-            @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-        `;
-        document.head.appendChild(style);
-    }
-
-    const existingModal = document.getElementById('custom-share-modal');
-    if (existingModal) existingModal.remove();
-
-    const encodedUrl = encodeURIComponent(shareUrl);
-    const encodedText = encodeURIComponent(shareText);
-
-    const modalHTML = `
-    <div id="custom-share-modal" class="share-modal-overlay" onclick="if(event.target === this) this.remove()">
-        <div class="share-modal-box">
-            <div class="share-modal-header">
-                <h3>مشاركة المنشور</h3>
-                <button onclick="document.getElementById('custom-share-modal').remove()" class="close-btn">&times;</button>
-            </div>
-            
-            <div class="share-options-grid">
-                <button class="share-option-btn" onclick="handleSocialShare('${postId}', 'repost')">
-                    <span class="icon">🔁</span>
-                    <span>إعادة نشر</span>
-                </button>
-                <button class="share-option-btn" onclick="handleSocialShare('${postId}', 'whatsapp', 'https://whatsapp.com{encodedText}%20${encodedUrl}')">
-                    <span class="icon">💬</span>
-                    <span>واتساب</span>
-                </button>
-                <button class="share-option-btn" onclick="handleSocialShare('${postId}', 'twitter', 'https://twitter.com{encodedText}&url=${encodedUrl}')">
-                    <span class="icon">𝕏</span>
-                    <span>منصة X</span>
-                </button>
-                <button class="share-option-btn" onclick="handleSocialShare('${postId}', 'facebook', 'https://facebook.com{encodedUrl}')">
-                    <span class="icon">📘</span>
-                    <span>فيسبوك</span>
-                </button>
-            </div>
-
-            <div class="share-link-box">
-                <input type="text" value="${shareUrl}" readonly>
-                <button onclick="handleSocialShare('${postId}', 'copy', '${shareUrl}')">نسخ</button>
-            </div>
-        </div>
-    </div>`;
-
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-};
+ 
 
 
 
