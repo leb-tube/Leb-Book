@@ -11880,7 +11880,7 @@ window.openRepostModal = async function (postId, shareUrl) {
 
     // 7) النشر
     const publishBtn = document.getElementById('repost-publish');
-   publishBtn.onclick = async function () {
+ publishBtn.onclick = async function () {
     const user = firebase.auth().currentUser;
     if (!user) {
         window.authSystem?.showMessage?.('يجب تسجيل الدخول أولاً', 'error');
@@ -11888,7 +11888,7 @@ window.openRepostModal = async function (postId, shareUrl) {
     }
 
     const content = ta.value.trim();
-    if (!content && originalMedia.length === 0) {
+    if (!content && !originalMedia.length) {
         window.authSystem?.showMessage?.('المحتوى فارغ', 'error');
         return;
     }
@@ -11898,7 +11898,7 @@ window.openRepostModal = async function (postId, shareUrl) {
     publishBtn.textContent = 'جارٍ النشر...';
 
     try {
-        // ── (أ) اجلب اسم وصورة الكاتب بدقة من كل المصادر ──
+        // ── (أ) جلب صورة واسم الكاتب ──
         let authorPhoto = window.authSystem?.currentUser?.photoURL
                        || user.photoURL
                        || '';
@@ -11922,18 +11922,22 @@ window.openRepostModal = async function (postId, shareUrl) {
 
         if (!authorName) authorName = user.email?.split('@')[0] || 'مستخدم';
 
-        // ── (ب) أنشئ المنشور ──
-        const newDocRef = await db.collection('posts').add({
+        // ── (ب) صورة واحدة (تطبيقك يستخدم imageUrl لا مصفوفة) ──
+        const firstImage = Array.isArray(originalMedia) && originalMedia.length
+            ? (typeof originalMedia[0] === 'string' ? originalMedia[0] : originalMedia[0]?.url || '')
+            : (typeof originalMedia === 'string' ? originalMedia : '');
+
+        // ── (ج) بناء المنشور بأسماء الحقول الفعلية ──
+        const newPostData = {
             content: content,
             text: content,
-            authorId: user.uid,
             userId: user.uid,
-            authorName: authorName,
             userName: authorName,
-            authorPhoto: authorPhoto,
-            authorAvatar: authorPhoto,
-            userPhoto: authorPhoto,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            userPhoto: authorPhoto,         // ← الحقل الرئيسي للصورة
+            authorPhoto: authorPhoto,       // احتياط
+            photoURL: authorPhoto,          // احتياط
+            imageUrl: firstImage,
+            videoData: null,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             likes: [],
             likedBy: [],
@@ -11942,13 +11946,14 @@ window.openRepostModal = async function (postId, shareUrl) {
             commentsCount: 0,
             shares: 0,
             reposts: 0,
-            images: originalMedia,
-            media: originalMedia,
             repostOf: postId,
             repostOfAuthor: originalAuthor
-        });
+        };
 
-        // ── (ج) زيادة عداد إعادة النشر في المنشور الأصلي ──
+        // ── (د) إنشاء المنشور في Firestore ──
+        const newDocRef = await db.collection('posts').add(newPostData);
+
+        // ── (هـ) زيادة عداد إعادة النشر ──
         try {
             await db.collection('posts').doc(postId).update({
                 reposts: firebase.firestore.FieldValue.increment(1)
@@ -11958,53 +11963,37 @@ window.openRepostModal = async function (postId, shareUrl) {
             });
         } catch (e) { console.warn('repost counter:', e); }
 
-        // ── (د) أضف المنشور للواجهة فوراً ──
+        // ── (و) إدراج فوري في الواجهة ──
         const newPostForUI = {
-            id: newDocRef.id,
-            docId: newDocRef.id,
-            content: content,
-            text: content,
-            authorId: user.uid,
-            userId: user.uid,
-            authorName: authorName,
-            userName: authorName,
-            authorPhoto: authorPhoto,
-            authorAvatar: authorPhoto,
-            userPhoto: authorPhoto,
-            createdAt: firebase.firestore.Timestamp.now(),
-            timestamp: firebase.firestore.Timestamp.now(),
-            likes: [],
-            likedBy: [],
-            likesCount: 0,
-            comments: [],
-            commentsCount: 0,
-            shares: 0,
-            reposts: 0,
-            images: originalMedia,
-            media: originalMedia,
-            repostOf: postId,
-            repostOfAuthor: originalAuthor
+            ...newPostData,
+            timestamp: firebase.firestore.Timestamp.now()
         };
 
-        const feedEl = document.querySelector(
-            '#feed, #posts-feed, #posts-container, .feed, .posts-list, #postsList, #newsFeed'
-        );
+        // الحاوية الرئيسية الفعلية = #postsFeed
+        const feedEl = document.getElementById('postsFeed');
 
         let prepended = false;
 
-        // المحاولة الأولى: استخدم دالة بناء عنصر المنشور الخاصة بالتطبيق
         if (feedEl && window.postManager && typeof window.postManager.createPostElement === 'function') {
             try {
-                const el = window.postManager.createPostElement(newPostForUI);
+                const el = window.postManager.createPostElement(newPostForUI, newDocRef.id);
                 if (el) {
-                    if (feedEl.firstChild) feedEl.insertBefore(el, feedEl.firstChild);
-                    else feedEl.appendChild(el);
+                    feedEl.insertBefore(el, feedEl.firstChild);
                     prepended = true;
+
+                    // ── حماية من الصورة المكسورة ──
+                    el.querySelectorAll('img').forEach(img => {
+                        img.addEventListener('error', function () {
+                            this.src = 'https://ui-avatars.com/api/?name=' +
+                                encodeURIComponent(authorName) +
+                                '&background=1877f2&color=fff&size=100';
+                        }, { once: true });
+                    });
                 }
             } catch (e) { console.warn('prepend failed:', e); }
         }
 
-        // الاحتياطي: أعد تحميل المنشورات من Firestore
+        // احتياطي: أعد تحميل التغذية بالكامل
         if (!prepended) {
             try {
                 if (window.postManager && typeof window.postManager.loadPosts === 'function') {
