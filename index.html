@@ -11849,11 +11849,23 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
                 return;
             }
 
-            // 5) حقن النص وإشعار الواجهة
-            editor.value = originalContent;
-            editor.dispatchEvent(new Event('input', { bubbles: true }));
-            editor.dispatchEvent(new Event('change', { bubbles: true }));
-            editor.focus();
+            // 5) حقن النص وإشعار الواجهة (محمي من أخطاء inline handlers)
+                editor.value = originalContent;
+
+            try {
+               editor.dispatchEvent(new Event('input', { bubbles: true }));
+               editor.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch (e) {
+       // إن كان oninput يستدعي دوال غير معرّفة (مثل autoResizeTextarea) نكمل بدون توقف
+              console.warn('input/change dispatch warning:', e);
+            }
+
+      // ضمان يدوي لضبط ارتفاع الحقل حتى لو فشل الـ handler
+          if (typeof window.autoResizeTextarea === 'function') {
+          try { window.autoResizeTextarea(editor); } catch (_) {}
+          }
+
+          editor.focus();
 
             // 6) نسخ الصور إن وُجدت ودعمت الدالة ذلك
             if (originalMedia.length && typeof window.addPostMedia === 'function') {
