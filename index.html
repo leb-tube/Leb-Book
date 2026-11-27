@@ -11861,11 +11861,30 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
             }
 
       // ضمان يدوي لضبط ارتفاع الحقل حتى لو فشل الـ handler
-          if (typeof window.autoResizeTextarea === 'function') {
-          try { window.autoResizeTextarea(editor); } catch (_) {}
-          }
+         if (typeof window.autoResizeTextarea !== 'function') {
+    window.autoResizeTextarea = function (el) {
+        if (!el || el.tagName !== 'TEXTAREA') return;
+        el.style.overflowY = 'hidden';
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    };
+}
 
-          editor.focus();
+// حقن النص بأمان
+editor.value = originalContent;
+
+try {
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    editor.dispatchEvent(new Event('change', { bubbles: true }));
+} catch (e) {
+    // حتى لو رمت inline handlers أخطاءً أخرى، نكمل
+    console.warn('dispatch warning (non-fatal):', e);
+}
+
+// ضمان يدوي لارتفاع الحقل
+try { window.autoResizeTextarea(editor); } catch (_) {}
+
+editor.focus();
 
             // 6) نسخ الصور إن وُجدت ودعمت الدالة ذلك
             if (originalMedia.length && typeof window.addPostMedia === 'function') {
