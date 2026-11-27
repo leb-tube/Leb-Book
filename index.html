@@ -11880,74 +11880,148 @@ window.openRepostModal = async function (postId, shareUrl) {
 
     // 7) النشر
     const publishBtn = document.getElementById('repost-publish');
-    publishBtn.onclick = async function () {
-        const user = firebase.auth().currentUser;
-        if (!user) {
-            window.authSystem?.showMessage?.('يجب تسجيل الدخول أولاً', 'error');
-            return;
+   publishBtn.onclick = async function () {
+    const user = firebase.auth().currentUser;
+    if (!user) {
+        window.authSystem?.showMessage?.('يجب تسجيل الدخول أولاً', 'error');
+        return;
+    }
+
+    const content = ta.value.trim();
+    if (!content && originalMedia.length === 0) {
+        window.authSystem?.showMessage?.('المحتوى فارغ', 'error');
+        return;
+    }
+
+    publishBtn.disabled = true;
+    const originalLabel = publishBtn.textContent;
+    publishBtn.textContent = 'جارٍ النشر...';
+
+    try {
+        // ── (أ) اجلب اسم وصورة الكاتب بدقة من كل المصادر ──
+        let authorPhoto = window.authSystem?.currentUser?.photoURL
+                       || user.photoURL
+                       || '';
+        let authorName  = window.authSystem?.currentUser?.displayName
+                       || user.displayName
+                       || '';
+
+        if (!authorPhoto || !authorName) {
+            try {
+                const userSnap = await db.collection('users').doc(user.uid).get();
+                if (userSnap.exists) {
+                    const ud = userSnap.data();
+                    authorPhoto = authorPhoto
+                        || ud.photoURL || ud.photo || ud.avatar
+                        || ud.profileImage || ud.profilePicture || '';
+                    authorName = authorName
+                        || ud.name || ud.displayName || ud.username || ud.fullName || '';
+                }
+            } catch (e) { console.warn('user profile fetch:', e); }
         }
 
-        const content = ta.value.trim();
-        if (!content && originalMedia.length === 0) {
-            window.authSystem?.showMessage?.('المحتوى فارغ', 'error');
-            return;
-        }
+        if (!authorName) authorName = user.email?.split('@')[0] || 'مستخدم';
 
-        publishBtn.disabled = true;
-        const originalLabel = publishBtn.textContent;
-        publishBtn.textContent = 'جارٍ النشر...';
+        // ── (ب) أنشئ المنشور ──
+        const newDocRef = await db.collection('posts').add({
+            content: content,
+            text: content,
+            authorId: user.uid,
+            userId: user.uid,
+            authorName: authorName,
+            userName: authorName,
+            authorPhoto: authorPhoto,
+            authorAvatar: authorPhoto,
+            userPhoto: authorPhoto,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            likes: [],
+            likedBy: [],
+            likesCount: 0,
+            comments: [],
+            commentsCount: 0,
+            shares: 0,
+            reposts: 0,
+            images: originalMedia,
+            media: originalMedia,
+            repostOf: postId,
+            repostOfAuthor: originalAuthor
+        });
 
+        // ── (ج) زيادة عداد إعادة النشر في المنشور الأصلي ──
         try {
-            // ⚠️ عدّل أسماء الحقول لتطابق مخطط Firestore عندك
-            await db.collection('posts').add({
-                content: content,
-                text: content,
-                authorId: user.uid,
-                userId: user.uid,
-                authorName: user.displayName || user.email?.split('@')[0] || 'مستخدم',
-                userName: user.displayName || user.email?.split('@')[0] || 'مستخدم',
-                authorPhoto: user.photoURL || '',
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-likes: [],
-comments: [],
-shares: 0,
-reposts: 0,
-likedBy: [],
-likesCount: 0,
-commentsCount: 0,
-                images: originalMedia,
-                media: originalMedia,
-                repostOf: postId,
-                repostOfAuthor: originalAuthor
-            });
-
-            // زيادة عداد إعادات النشر للمنشور الأصلي
             await db.collection('posts').doc(postId).update({
                 reposts: firebase.firestore.FieldValue.increment(1)
             });
-
             document.querySelectorAll('[data-repost-count="' + postId + '"]').forEach(function (s) {
                 s.textContent = (parseInt(s.textContent) || 0) + 1;
             });
+        } catch (e) { console.warn('repost counter:', e); }
 
-            window.authSystem?.showMessage?.('تمت إعادة النشر بنجاح', 'success');
-            close();
+        // ── (د) أضف المنشور للواجهة فوراً ──
+        const newPostForUI = {
+            id: newDocRef.id,
+            docId: newDocRef.id,
+            content: content,
+            text: content,
+            authorId: user.uid,
+            userId: user.uid,
+            authorName: authorName,
+            userName: authorName,
+            authorPhoto: authorPhoto,
+            authorAvatar: authorPhoto,
+            userPhoto: authorPhoto,
+            createdAt: firebase.firestore.Timestamp.now(),
+            timestamp: firebase.firestore.Timestamp.now(),
+            likes: [],
+            likedBy: [],
+            likesCount: 0,
+            comments: [],
+            commentsCount: 0,
+            shares: 0,
+            reposts: 0,
+            images: originalMedia,
+            media: originalMedia,
+            repostOf: postId,
+            repostOfAuthor: originalAuthor
+        };
 
-            // محاولة تحديث التغذية
+        const feedEl = document.querySelector(
+            '#feed, #posts-feed, #posts-container, .feed, .posts-list, #postsList, #newsFeed'
+        );
+
+        let prepended = false;
+
+        // المحاولة الأولى: استخدم دالة بناء عنصر المنشور الخاصة بالتطبيق
+        if (feedEl && window.postManager && typeof window.postManager.createPostElement === 'function') {
             try {
-                if (typeof window.loadPosts === 'function') window.loadPosts();
-                else if (typeof window.refreshFeed === 'function') window.refreshFeed();
-                else if (typeof window.renderPosts === 'function') window.renderPosts();
-            } catch (_) {}
-        } catch (err) {
-            console.error(err);
-            window.authSystem?.showMessage?.('تعذر النشر، حاول مجدداً', 'error');
-            publishBtn.disabled = false;
-            publishBtn.textContent = originalLabel;
+                const el = window.postManager.createPostElement(newPostForUI);
+                if (el) {
+                    if (feedEl.firstChild) feedEl.insertBefore(el, feedEl.firstChild);
+                    else feedEl.appendChild(el);
+                    prepended = true;
+                }
+            } catch (e) { console.warn('prepend failed:', e); }
         }
-    };
 
+        // الاحتياطي: أعد تحميل المنشورات من Firestore
+        if (!prepended) {
+            try {
+                if (window.postManager && typeof window.postManager.loadPosts === 'function') {
+                    await window.postManager.loadPosts();
+                }
+            } catch (e) { console.warn('reload failed:', e); }
+        }
+
+        window.authSystem?.showMessage?.('تمت إعادة النشر بنجاح', 'success');
+        close();
+    } catch (err) {
+        console.error(err);
+        window.authSystem?.showMessage?.('تعذر النشر، حاول مجدداً', 'error');
+        publishBtn.disabled = false;
+        publishBtn.textContent = originalLabel;
+    }
+};
     // دوال مساعدة
     function autoResizeRepost(el) {
         el.style.height = 'auto';
