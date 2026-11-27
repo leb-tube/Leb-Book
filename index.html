@@ -11751,10 +11751,10 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
     const encUrl = encodeURIComponent(shareUrl);
     const encText = encodeURIComponent(shareText);
 
-    // بناء الروابط الصحيحة للمنصات
-    const waLink = 'https://whatsapp.com' + encText + '%20' + encUrl;
-    const xLink = 'https://twitter.com' + encText + '&url=' + encUrl;
-    const fbLink = 'https://facebook.com' + encUrl;
+   // بناء الروابط الصحيحة للمنصات
+const waLink = 'https://wa.me/?text=' + encodeURIComponent(shareText + ' ' + shareUrl);
+const xLink = 'https://x.com/intent/tweet?text=' + encText + '&url=' + encUrl;
+const fbLink = 'https://www.facebook.com/sharer/sharer.php?u=' + encUrl;
 
     const modal = document.createElement('div');
     modal.id = 'custom-share-modal';
