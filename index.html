@@ -4686,6 +4686,125 @@ iframe {
 .nav-store.simple:hover i {
     transform: scale(1.1);
 }
+.share-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    direction: rtl;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.share-modal-box {
+    background: #ffffff;
+    width: 90%;
+    max-width: 400px;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.share-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+}
+
+.share-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #1c1e21;
+}
+
+.close-btn {
+    background: #f0f2f5;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    color: #606770;
+}
+
+.share-options-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.share-option-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 10px;
+    transition: background 0.2s;
+    font-size: 13px;
+    color: #333;
+}
+
+.share-option-btn:hover {
+    background: #f0f2f5;
+}
+
+.share-option-btn .icon {
+    font-size: 24px;
+    background: #f0f2f5;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.share-link-box {
+    display: flex;
+    background: #f0f2f5;
+    padding: 6px;
+    border-radius: 10px;
+    gap: 8px;
+}
+
+.share-link-box input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 6px;
+    font-size: 13px;
+    color: #555;
+    outline: none;
+    direction: ltr;
+}
+
+.share-link-box button {
+    background: #1877f2;
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
  </style>
 </head>
 <body>
@@ -11481,20 +11600,95 @@ window.toggleUnifiedLike = async function(postId, btn) {
 };
 
 window.shareUnifiedPost = async function(postId) {
+    // بناء رابط المنشور (يمكنك تعديل المسار حسب بنية موقعك)
+    const postUrl = `${window.location.origin}/post.html?id=${postId}`;
+    const shareText = 'شاهد هذا المنشور الرائع!';
+
+    // إزالة أي نافذة مشاركة سابقة إن وجدت
+    const existingModal = document.getElementById('custom-share-modal');
+    if (existingModal) existingModal.remove();
+
+    // إنشاء هيكل النافذة المنبثقة (شبيهة بفيسبوك وتويتر)
+    const modalHTML = `
+    <div id="custom-share-modal" class="share-modal-overlay" onclick="if(event.target === this) this.remove()">
+        <div class="share-modal-box">
+            <div class="share-modal-header">
+                <h3>مشاركة المنشور</h3>
+                <button onclick="document.getElementById('custom-share-modal').remove()" class="close-btn">&times;</button>
+            </div>
+            
+            <div class="share-options-grid">
+                <!-- خيار إعادة النشر الداخلي (مثل Retweet) -->
+                <button class="share-option-btn" onclick="executeShareAction('${postId}', 'repost')">
+                    <span class="icon">🔁</span>
+                    <span>إعادة نشر</span>
+                </button>
+
+                <!-- مشاركة عبر واتساب -->
+                <button class="share-option-btn" onclick="executeShareAction('${postId}', 'whatsapp', '${postUrl}', '${shareText}')">
+                    <span class="icon">💬</span>
+                    <span>واتساب</span>
+                </button>
+
+                <!-- مشاركة عبر X (تويتر) -->
+                <button class="share-option-btn" onclick="executeShareAction('${postId}', 'twitter', '${postUrl}', '${shareText}')">
+                    <span class="icon">𝕏</span>
+                    <span>منصة X</span>
+                </button>
+
+                <!-- مشاركة عبر فيسبوك -->
+                <button class="share-option-btn" onclick="executeShareAction('${postId}', 'facebook', '${postUrl}')">
+                    <span class="icon">📘</span>
+                    <span>فيسبوك</span>
+                </button>
+            </div>
+
+            <!-- شريط نسخ الرابط -->
+            <div class="share-link-box">
+                <input type="text" value="${postUrl}" readonly id="share-url-input">
+                <button onclick="executeShareAction('${postId}', 'copy', '${postUrl}')">نسخ</button>
+            </div>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+};
+
+// دالة تنفيذ الإجراء وتحديث العداد في Firebase
+window.executeShareAction = async function(postId, platform, url = '', text = '') {
     try {
+        // تنفيذ إجراء المنصة المختارة
+        if (platform === 'copy') {
+            await navigator.clipboard.writeText(url);
+            if (window.authSystem) window.authSystem.showMessage('تم نسخ الرابط!', 'success');
+        } else if (platform === 'whatsapp') {
+            window.open(`https://whatsapp.com{encodeURIComponent(text + ' ' + url)}`, '_blank');
+        } else if (platform === 'twitter') {
+            window.open(`https://twitter.com{encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+        } else if (platform === 'facebook') {
+            window.open(`https://facebook.com{encodeURIComponent(url)}`, '_blank');
+        } else if (platform === 'repost') {
+            if (window.authSystem) window.authSystem.showMessage('تمت إعادة نشر المنشور في صفحتك!', 'success');
+        }
+
+        // تحديث العداد في Firestore والواجهة
         await db.collection('posts').doc(postId).update({
             shares: firebase.firestore.FieldValue.increment(1)
         });
+
         document.querySelectorAll(`[data-share-count="${postId}"]`).forEach(span => {
             span.textContent = (parseInt(span.textContent) || 0) + 1;
         });
-        if (window.authSystem) {
-            window.authSystem.showMessage('تمت مشاركة المنشور بنجاح!', 'success');
-        }
+
+        // إغلاق النافذة بعد الاختيار
+        const modal = document.getElementById('custom-share-modal');
+        if (modal) modal.remove();
+
     } catch (error) {
         console.error('❌ خطأ في المشاركة:', error);
     }
 };
+
 
 window.focusUnifiedComment = function(postId) {
     window.toggleCommentsVisibility(postId, true);
