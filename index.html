@@ -11838,6 +11838,18 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
     modal.innerHTML =
         '<div class="repost-box">' +
             '<div class="repost-header">' +
+                '<div style="display:flex; align-items:center; gap:10px;">' +
+                    '<h3>إعادة النشر</h3>' +
+                    '<select id="repost-privacy" style="border: 1px solid #ddd; border-radius: 6px; background: #f0f2f5; color: #333; font-size: 13px; padding: 4px 8px; outline: none; cursor: pointer;">' +
+                        '<option value="public" selected>🌍 عام للجميع</option>' +
+                        '<option value="friends">👥 الأصدقاء فقط</option>' +
+                        '<option value="private">🔒 خاص بي فقط</option>' +
+                    '</select>' +
+                '</div>' +
+                '<button type="button" class="repost-close" id="repost-close">&times;</button>' +
+            '</div>' +
+        '<div class="repost-box">' +
+            '<div class="repost-header">' +
                 '<h3>إعادة النشر</h3>' +
                 '<button type="button" class="repost-close" id="repost-close">&times;</button>' +
             '</div>' +
@@ -11928,10 +11940,11 @@ window.openCustomShareModal = function(postId, shareUrl, shareText) {
                 } catch (e) { console.warn(e); }
             }
             if (!authorName) authorName = user.email?.split('@')[0] || 'مستخدم';
-
+            const selectedPrivacy = document.getElementById('repost-privacy')?.value || 'public'
             const newPostData = {
                 content: content,
                 text: content,
+                privacy: selectedPrivacy, 
                 userId: user.uid,
                 userName: authorName,
                 userPhoto: authorPhoto,
